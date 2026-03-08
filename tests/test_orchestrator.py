@@ -465,9 +465,46 @@ result = {
     "blocker_reason": "",
     "artifacts": [],
     "notes": [],
-    "new_packages": []
+    "new_packages": [],
+    "stage_output": {}
 }
-if stage == "breakdown":
+if stage == "feasibility":
+    result["summary"] = "project is feasible with manageable delivery risk"
+    result["stage_output"] = {
+        "verdict": "go",
+        "key_points": [
+            "The goal is narrow enough to start with a staged planning flow.",
+            "A planning-first approach reduces downstream rework."
+        ],
+        "risks": [
+            "Detailed delivery scope is still open and needs architecture framing."
+        ],
+        "open_questions": [
+            "Which roles need access to the first usable release?"
+        ]
+    }
+elif stage == "architecture":
+    result["summary"] = "recommend a thin control plane with staged worker execution"
+    result["stage_output"] = {
+        "components": [
+            "Protected dashboard for goal intake and status.",
+            "Worker runtime that executes packages and writes structured results."
+        ],
+        "decisions": [
+            "Keep discovery separate from delivery work.",
+            "Use small capability-based packages instead of one large execution plan."
+        ],
+        "delivery_sequence": [
+            "Lock the discovery flow and prompts.",
+            "Generate implementation and QA packages from the breakdown stage."
+        ],
+        "validation_strategy": [
+            "Run automated tests after prompt and runtime changes.",
+            "Confirm generated packages preserve dependencies."
+        ],
+        "handoff": "Break the architecture into executable backend and QA work packages."
+    }
+elif stage == "breakdown":
     result["summary"] = "created backend and qa follow-on packages"
     result["new_packages"] = [
         {
@@ -487,6 +524,14 @@ if stage == "breakdown":
             "depends_on": ["backend_impl"]
         }
     ]
+    result["stage_output"] = {
+        "generated_package_titles": [
+            "Implement core feature",
+            "Run QA verification"
+        ],
+        "generated_package_count": 2,
+        "handoff": "Backend builds the feature first, then QA verifies the result."
+    }
 Path(os.environ["CODEX_AUTOMATE_RESULT_FILE"]).write_text(
     json.dumps(result),
     encoding="utf-8",
@@ -556,9 +601,21 @@ PY"""
 
         packages = self.store.list_packages(goal_id=goal_id)
         self.assertEqual(len(packages), 5)
+        stage_packages = {
+            package["metadata"].get("stage"): package
+            for package in packages
+            if package["metadata"].get("stage")
+        }
+        self.assertEqual(stage_packages["feasibility"]["metadata"]["stage_output"]["verdict"], "go")
+        self.assertIn("Break the architecture", stage_packages["architecture"]["metadata"]["stage_output"]["handoff"])
+        self.assertEqual(stage_packages["breakdown"]["metadata"]["stage_output"]["generated_package_count"], 2)
         generated = [package for package in packages if package["metadata"].get("generated_by_package_id")]
         self.assertEqual(len(generated), 2)
         breakdown = next(package for package in packages if package["metadata"].get("stage") == "breakdown")
+        self.assertEqual(
+            breakdown["metadata"]["latest_run"]["stage_output"]["generated_package_titles"],
+            ["Implement core feature", "Run QA verification"],
+        )
         for package in generated:
             self.assertEqual(package["parent_package_id"], breakdown["id"])
             self.assertIn(breakdown["id"], package["dependency_ids"])

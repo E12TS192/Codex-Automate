@@ -197,7 +197,8 @@ class WorkerRuntime:
             return dedent(
                 """\
                 - Decide whether the project is viable now, viable with constraints, or blocked by missing input.
-                - In notes, cover: scope risks, dependency risks, delivery risks, and missing information.
+                - In stage_output, set verdict plus arrays for key_points, risks and open_questions.
+                - In notes, cover only the most decision-relevant rationale, not a long report.
                 - The summary should clearly state the overall feasibility verdict.
                 - Do not create follow-on packages in this stage.
                 """
@@ -206,7 +207,8 @@ class WorkerRuntime:
             return dedent(
                 """\
                 - Produce a practical implementation direction, not a generic essay.
-                - In notes, cover: key components, interfaces, sequencing, technical risks, and validation strategy.
+                - In stage_output, fill components, decisions, delivery_sequence, validation_strategy and handoff.
+                - In notes, keep only compact rationale for the most important tradeoffs.
                 - The summary should state the recommended architecture in one sentence.
                 - Do not create follow-on packages in this stage.
                 """
@@ -215,6 +217,7 @@ class WorkerRuntime:
             return dedent(
                 """\
                 - Convert the architecture into concrete work packages that other agents can execute immediately.
+                - In stage_output, fill generated_package_titles, generated_package_count and handoff.
                 - Each new package should have a clear title, direct description, capability, and realistic priority.
                 - Use depends_on keys when later packages must wait for earlier generated packages.
                 - Prefer a small, executable package graph over a large speculative backlog.
@@ -448,7 +451,51 @@ class WorkerRuntime:
         payload.setdefault("artifacts", [])
         payload.setdefault("notes", [])
         payload.setdefault("new_packages", [])
+        payload.setdefault("stage_output", {})
         return payload
+
+    def _validate_stage_output(self, package: Dict[str, Any], payload: Dict[str, Any]) -> None:
+        stage = dict(package.get("metadata", {})).get("stage")
+        if stage is None or payload.get("status") != "completed":
+            return
+
+        stage_output = dict(payload.get("stage_output") or {})
+
+        def require_text_list(name: str) -> None:
+            values = stage_output.get(name)
+            if not isinstance(values, list) or not values or not all(isinstance(item, str) and item.strip() for item in values):
+                raise ValueError(f"Stage '{stage}' requires stage_output.{name} with at least one non-empty string.")
+
+        def require_text(name: str) -> None:
+            value = stage_output.get(name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"Stage '{stage}' requires stage_output.{name} as a non-empty string.")
+
+        if stage == "feasibility":
+            if stage_output.get("verdict") not in {"go", "conditional", "blocked"}:
+                raise ValueError("Stage 'feasibility' requires stage_output.verdict as go, conditional or blocked.")
+            require_text_list("key_points")
+            require_text_list("risks")
+            if "open_questions" not in stage_output or not isinstance(stage_output.get("open_questions"), list):
+                raise ValueError("Stage 'feasibility' requires stage_output.open_questions as an array.")
+            return
+
+        if stage == "architecture":
+            require_text_list("components")
+            require_text_list("decisions")
+            require_text_list("delivery_sequence")
+            require_text_list("validation_strategy")
+            require_text("handoff")
+            return
+
+        if stage == "breakdown":
+            if not payload.get("new_packages"):
+                raise ValueError("Stage 'breakdown' must emit at least one new_packages entry.")
+            require_text("handoff")
+            require_text_list("generated_package_titles")
+            count = stage_output.get("generated_package_count")
+            if not isinstance(count, int) or count != len(payload["new_packages"]):
+                raise ValueError("Stage 'breakdown' requires stage_output.generated_package_count to match new_packages.")
 
     def _append_run_metadata(
         self,
@@ -471,11 +518,14 @@ class WorkerRuntime:
             "artifacts": payload.get("artifacts", []),
             "notes": payload.get("notes", []),
             "new_packages": payload.get("new_packages", []),
+            "stage_output": payload.get("stage_output", {}),
             "return_code": return_code,
         }
         runs.append(run_record)
         metadata["runs"] = runs[-20:]
         metadata["latest_run"] = run_record
+        if payload.get("stage_output"):
+            metadata["stage_output"] = payload["stage_output"]
         self.store.update_package_metadata(package_id, metadata)
 
     def _runner_error_payload(self, return_code: int, run_dir: Path, stderr_path: Path) -> Dict[str, Any]:
@@ -557,6 +607,7 @@ class WorkerRuntime:
             if completed.returncode == 0:
                 try:
                     payload = self._load_result_payload(paths["result"])
+                    self._validate_stage_output(package, payload)
                 except Exception as exc:
                     payload = {
                         "status": "blocked",

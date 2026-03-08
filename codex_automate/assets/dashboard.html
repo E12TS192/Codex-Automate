@@ -326,6 +326,34 @@
         margin-top: 6px;
       }
 
+      .stage-sections {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .stage-section {
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+
+      .stage-section:first-child {
+        padding-top: 0;
+        border-top: none;
+      }
+
+      .stage-section h3 {
+        margin: 0 0 6px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .stage-inline {
+        margin-top: 8px;
+      }
+
       .hint {
         color: var(--muted);
         font-size: 14px;
@@ -571,6 +599,123 @@
         return "delivery";
       }
 
+      function stageOutput(pkg) {
+        return pkg?.metadata?.stage_output || pkg?.metadata?.latest_run?.stage_output || {};
+      }
+
+      function latestSummary(pkg) {
+        return pkg?.metadata?.latest_run?.summary || pkg?.description || "Noch keine Details vorhanden.";
+      }
+
+      function verdictLabel(verdict) {
+        const labels = {
+          go: "Freigegeben",
+          conditional: "Mit Einschraenkungen",
+          blocked: "Blockiert"
+        };
+        return labels[verdict] || verdict || "Offen";
+      }
+
+      function renderStageList(items, emptyText) {
+        if (!Array.isArray(items) || !items.length) {
+          return `<p class="small-copy">${escapeHtml(emptyText)}</p>`;
+        }
+        return `<ul class="list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+      }
+
+      function renderStageSection(label, content) {
+        return `
+          <section class="stage-section">
+            <h3>${escapeHtml(label)}</h3>
+            ${content}
+          </section>
+        `;
+      }
+
+      function renderDiscoveryDetails(stage, pkg) {
+        if (!pkg) {
+          return renderStageSection("Status", "<p class='small-copy'>Diese Phase wurde noch nicht gestartet.</p>");
+        }
+        const output = stageOutput(pkg);
+        if (stage === "feasibility") {
+          return `
+            <div class="stage-sections">
+              ${renderStageSection(
+                "Einschaetzung",
+                `<div class="chip-row stage-inline">${chip(verdictLabel(output.verdict || "offen"))}</div>`
+              )}
+              ${renderStageSection("Kernaussagen", renderStageList(output.key_points, "Noch keine Kernaussagen hinterlegt."))}
+              ${renderStageSection("Risiken", renderStageList(output.risks, "Noch keine Risiken hinterlegt."))}
+              ${renderStageSection(
+                "Offene Fragen",
+                renderStageList(output.open_questions, "Keine offenen Fragen gemeldet.")
+              )}
+            </div>
+          `;
+        }
+        if (stage === "architecture") {
+          return `
+            <div class="stage-sections">
+              ${renderStageSection("Bausteine", renderStageList(output.components, "Noch keine Komponenten dokumentiert."))}
+              ${renderStageSection("Schluesselentscheidungen", renderStageList(output.decisions, "Noch keine Entscheidungen dokumentiert."))}
+              ${renderStageSection(
+                "Lieferreihenfolge",
+                renderStageList(output.delivery_sequence, "Noch keine Lieferreihenfolge festgelegt.")
+              )}
+              ${renderStageSection(
+                "Validierung",
+                renderStageList(output.validation_strategy, "Noch keine Validierungsstrategie hinterlegt.")
+              )}
+              ${renderStageSection(
+                "Uebergabe",
+                `<p class="small-copy">${escapeHtml(output.handoff || "Noch keine Uebergabe notiert.")}</p>`
+              )}
+            </div>
+          `;
+        }
+        if (stage === "breakdown") {
+          return `
+            <div class="stage-sections">
+              ${renderStageSection(
+                "Erzeugte Pakete",
+                `
+                  <div class="chip-row stage-inline">${chip(`${output.generated_package_count || 0} Pakete`)}</div>
+                  ${renderStageList(output.generated_package_titles, "Noch keine Folgepakete erzeugt.")}
+                `
+              )}
+              ${renderStageSection(
+                "Uebergabe",
+                `<p class="small-copy">${escapeHtml(output.handoff || "Noch keine Uebergabe notiert.")}</p>`
+              )}
+            </div>
+          `;
+        }
+        return renderStageSection("Details", `<p class="small-copy">${escapeHtml(latestSummary(pkg))}</p>`);
+      }
+
+      function renderDeliveryDetails(packages) {
+        if (!packages.length) {
+          return `
+            <div class="stage-sections">
+              ${renderStageSection(
+                "Status",
+                "<p class='small-copy'>Diese Phase startet, sobald aus der Paketplanung konkrete Folgearbeit entsteht.</p>"
+              )}
+            </div>
+          `;
+        }
+        return `
+          <div class="stage-sections">
+            ${renderStageSection(
+              "Umsetzungspakete",
+              `<ul class="list">${sortByPriority(packages)
+                .map((pkg) => `<li>${escapeHtml(pkg.title)} (${escapeHtml(stageLabel(inferStage(pkg)))}, ${escapeHtml(pkg.status)})</li>`)
+                .join("")}</ul>`
+            )}
+          </div>
+        `;
+      }
+
       function collectStageCards(packages) {
         const discovery = stageOrder.map((stage) => {
           const pkg = packages.find((item) => inferStage(item) === stage);
@@ -579,7 +724,8 @@
             label: stageLabel(stage),
             status: pkg ? pkg.status : "pending",
             title: pkg ? pkg.title : stageLabel(stage),
-            detail: pkg ? pkg.description : "Noch nicht angelegt.",
+            summary: pkg ? latestSummary(pkg) : "Noch nicht gestartet.",
+            details: renderDiscoveryDetails(stage, pkg),
             blocker: pkg?.blocker_reason || ""
           };
         });
@@ -600,9 +746,10 @@
           label: "Umsetzung",
           status: deliveryStatus,
           title: deliveryPackages.length ? `${deliveryPackages.length} Folgepakete angelegt` : "Noch keine Folgepakete",
-          detail: deliveryPackages.length
+          summary: deliveryPackages.length
             ? "Die Paketplanung hat konkrete Folgearbeit erzeugt, die jetzt vom Team abgearbeitet wird."
             : "Diese Phase startet erst, wenn aus der Paketplanung neue Arbeitspakete entstehen.",
+          details: renderDeliveryDetails(deliveryPackages),
           blocker: deliveryPackages.find((pkg) => pkg.blocker_reason)?.blocker_reason || ""
         });
 
@@ -686,7 +833,8 @@
                   </div>
                   ${badge(stage.status)}
                 </div>
-                <p class="small-copy" style="margin-top: 10px;">${escapeHtml(stage.detail)}</p>
+                <p class="small-copy" style="margin-top: 10px;">${escapeHtml(stage.summary)}</p>
+                ${stage.details}
                 ${stage.blocker ? `<div class="chip-row" style="margin-top: 10px;">${chip(stage.blocker, "warning")}</div>` : ""}
               </article>
             `;

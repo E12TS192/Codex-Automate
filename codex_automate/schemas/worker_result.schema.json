@@ -59,6 +59,54 @@
           }
         }
       }
+    },
+    "stage_output": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": ["go", "conditional", "blocked"]
+        },
+        "key_points": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "risks": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "open_questions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "components": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "decisions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "delivery_sequence": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "validation_strategy": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "handoff": {
+          "type": "string"
+        },
+        "generated_package_titles": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "generated_package_count": {
+          "type": "integer"
+        }
+      }
     }
   }
 }
