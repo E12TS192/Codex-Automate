@@ -23,32 +23,62 @@ class Orchestrator:
         acceptance_text = ", ".join(acceptance) if acceptance else "No explicit acceptance criteria provided yet."
         return [
             WorkPackageInput(
-                key="feasibility",
-                title="Machbarkeits-Feedback erstellen",
+                key="mvp_scope",
+                title="Admin-Flows und MVP-Zielbild eingrenzen",
                 description=(
-                    f"Pruefe die grundsaetzliche Machbarkeit fuer das Ziel '{payload['title']}'. "
+                    f"Pruefe fuer '{payload['title']}' zuerst nur den kleinsten sinnvollen MVP-Zuschnitt. "
                     f"Objective: {objective}. Acceptance criteria: {acceptance_text}. "
-                    "Bewerte grobe Risiken, fehlende Informationen, grobe Umsetzungsstrategie und entscheide, "
-                    "ob das Vorhaben sinnvoll fortgesetzt werden sollte."
+                    "Identifiziere die wichtigsten IT-Admin-Flows, den engsten ersten Nutzen und was bewusst "
+                    "nicht in den Startumfang gehoert. Halte die Analyse knapp und umsetzungsnah."
                 ),
                 capability="planning",
                 priority=100,
                 kind="analysis",
-                metadata={"stage": "feasibility", "allow_new_packages": False},
+                metadata={"stage": "mvp_scope", "allow_new_packages": False},
+            ),
+            WorkPackageInput(
+                key="integration_feasibility",
+                title="SaaS-Integrationen und Datenquellen bewerten",
+                description=(
+                    f"Pruefe fuer '{payload['title']}' nur die wichtigsten Cloud-Dienste und Datenquellen. "
+                    f"Objective: {objective}. Acceptance criteria: {acceptance_text}. "
+                    "Bewerte fuer ein kleines MVP, welche Integrationen zuerst Sinn ergeben, welche Kernaktionen "
+                    "realistisch sind und wo API-, Lizenz- oder Governance-Grenzen liegen."
+                ),
+                capability="planning",
+                priority=95,
+                kind="analysis",
+                depends_on=["mvp_scope"],
+                metadata={"stage": "integration_feasibility", "allow_new_packages": False},
+            ),
+            WorkPackageInput(
+                key="risk_review",
+                title="Risiken, Governance und offene Fragen verdichten",
+                description=(
+                    f"Verdichte fuer '{payload['title']}' die wichtigsten Betriebs-, Sicherheits- und "
+                    f"Governance-Risiken. Objective: {objective}. Acceptance criteria: {acceptance_text}. "
+                    "Leite daraus einen klaren go-, conditional- oder blocked-Entscheid fuer den naechsten "
+                    "Planungsschritt ab."
+                ),
+                capability="planning",
+                priority=92,
+                kind="analysis",
+                depends_on=["integration_feasibility"],
+                metadata={"stage": "risk_review", "allow_new_packages": False},
             ),
             WorkPackageInput(
                 key="architecture",
                 title="Architektur- und Umsetzungsplan erstellen",
                 description=(
-                    f"Erstelle auf Basis des Machbarkeits-Feedbacks einen belastbaren Architektur- und "
-                    f"Umsetzungsplan fuer '{payload['title']}'. Objective: {objective}. "
+                    f"Erstelle auf Basis von MVP-Zuschnitt, Integrationsbild und Risikobewertung einen belastbaren "
+                    f"Architektur- und Umsetzungsplan fuer '{payload['title']}'. Objective: {objective}. "
                     "Lege Systemgrenzen, Hauptkomponenten, wichtige Entscheidungen, Risiken und die "
                     "empfohlene Implementierungsreihenfolge fest."
                 ),
                 capability="planning",
-                priority=95,
+                priority=91,
                 kind="planning",
-                depends_on=["feasibility"],
+                depends_on=["risk_review"],
                 metadata={"stage": "architecture", "allow_new_packages": False},
             ),
             WorkPackageInput(

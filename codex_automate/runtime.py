@@ -193,6 +193,7 @@ class WorkerRuntime:
             - Always emit all top-level schema fields, including new_packages and stage_output.
             - If you emit new_packages, every package entry must include all schema keys. Use empty arrays/objects and a non-empty kind string when nothing special is needed.
             - In stage_output, keep irrelevant fields empty or null, but still include them.
+            - Prefer the existing package context over fresh exploration. Use only the minimum research needed to answer this package.
             - Save any supporting artifacts under the artifact directory when useful.
             - Your final response must satisfy the provided JSON schema.
 
@@ -209,20 +210,45 @@ class WorkerRuntime:
                 """\
                 - This is a blocker-resolution package. Diagnose the blocker using the blocked package context and its existing run artifacts first.
                 - Do not do broad new discovery or web research unless the blocker explicitly cannot be resolved from the existing context.
+                - For planning or orchestrator blockers, prefer zero new web research and operate only from the existing logs, prompt and context.
                 - The goal is an operational next step: either a narrow retry plan, a concrete fix condition, or a concise no-go reason.
                 - Keep the summary short and operational.
                 - Keep notes compact and action-oriented.
                 - Do not create follow-on packages in this stage.
                 """
             ).strip()
-        if stage == "feasibility":
+        if stage == "mvp_scope":
             return dedent(
                 """\
-                - Decide whether the project is viable now, viable with constraints, or blocked by missing input.
+                - Define the smallest useful first release and the most important IT-admin user flows.
+                - Decide whether this first release is viable now, viable with constraints, or blocked by missing input.
                 - In stage_output, set verdict plus arrays for key_points, risks and open_questions.
-                - Keep research bounded. Prefer a small set of focused checks and then synthesize.
+                - Do not do broad web research. Prefer reasoning from the goal and acceptance criteria; if needed, use at most a few focused checks.
                 - In notes, cover only the most decision-relevant rationale, not a long report.
-                - The summary should clearly state the overall feasibility verdict.
+                - The summary should clearly state the MVP feasibility verdict.
+                - Keep the output short and concrete.
+                - Do not create follow-on packages in this stage.
+                """
+            ).strip()
+        if stage == "integration_feasibility":
+            return dedent(
+                """\
+                - Evaluate only the highest-value SaaS integrations and identity/data sources for the MVP.
+                - In stage_output, set verdict plus arrays for key_points, risks and open_questions.
+                - Limit yourself to the few systems that matter most for a first release.
+                - Prefer targeted checks over broad research and synthesize quickly.
+                - The summary should state whether the first integrations are feasible for an MVP.
+                - Do not create follow-on packages in this stage.
+                """
+            ).strip()
+        if stage == "risk_review":
+            return dedent(
+                """\
+                - Turn the current picture into a go, conditional or blocked planning decision.
+                - In stage_output, set verdict plus arrays for key_points, risks and open_questions.
+                - Focus on governance, security, operational safety and destructive offboarding risks.
+                - Reuse earlier findings and avoid fresh broad research.
+                - The summary should state the overall planning recommendation in one sentence.
                 - Do not create follow-on packages in this stage.
                 """
             ).strip()
@@ -498,13 +524,13 @@ class WorkerRuntime:
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"Stage '{stage}' requires stage_output.{name} as a non-empty string.")
 
-        if stage == "feasibility":
+        if stage in {"mvp_scope", "integration_feasibility", "risk_review"}:
             if stage_output.get("verdict") not in {"go", "conditional", "blocked"}:
-                raise ValueError("Stage 'feasibility' requires stage_output.verdict as go, conditional or blocked.")
+                raise ValueError(f"Stage '{stage}' requires stage_output.verdict as go, conditional or blocked.")
             require_text_list("key_points")
             require_text_list("risks")
             if "open_questions" not in stage_output or not isinstance(stage_output.get("open_questions"), list):
-                raise ValueError("Stage 'feasibility' requires stage_output.open_questions as an array.")
+                raise ValueError(f"Stage '{stage}' requires stage_output.open_questions as an array.")
             return
 
         if stage == "architecture":

@@ -434,7 +434,7 @@
         </div>
         <p class="lede">
           Diese Ansicht zeigt den Stand eines Projekts verstaendlich und ohne Infrastruktur-Details. Erst wird die
-          Machbarkeit geklaert, dann die Architektur und danach die konkrete Paketplanung fuer die Umsetzung.
+          MVP-Idee eingegrenzt, dann Integrationen und Risiken geklaert, danach Architektur und konkrete Paketplanung.
         </p>
       </section>
 
@@ -475,8 +475,8 @@
           <article class="panel composer-panel">
             <h2>Neues Projekt starten</h2>
             <p class="hint">
-              Gib einfach Ziel, Kontext und Erfolgskriterien an. Die ersten drei Stufen werden automatisch als
-              Machbarkeit, Architektur und Paketzerlegung angelegt.
+              Gib einfach Ziel, Kontext und Erfolgskriterien an. Die ersten fuenf Stufen werden automatisch als
+              MVP-Zielbild, Integrationen, Risiken, Architektur und Paketzerlegung angelegt.
             </p>
             <div class="stack">
               <label>
@@ -519,9 +519,11 @@
     </main>
 
     <script>
-      const stageOrder = ["feasibility", "architecture", "breakdown"];
+      const stageOrder = ["mvp_scope", "integration_feasibility", "risk_review", "architecture", "breakdown"];
       const stageLabels = {
-        feasibility: "Machbarkeit",
+        mvp_scope: "Nutzerfluesse",
+        integration_feasibility: "Integrationen",
+        risk_review: "Risiken",
         architecture: "Architektur",
         breakdown: "Paketplanung",
         delivery: "Umsetzung",
@@ -530,7 +532,7 @@
       };
 
       const defaultObjective =
-        "Wir wollen ein Projekt strukturiert angehen und zuerst Machbarkeit, Architektur und konkrete Pakete klaeren.";
+        "Wir wollen ein Projekt strukturiert angehen und zuerst Nutzerfluesse, Integrationen, Risiken, Architektur und konkrete Pakete klaeren.";
       const defaultCriteria = [
         "Die wichtigsten Risiken sind benannt.",
         "Ein tragfaehiger Architekturansatz ist beschrieben.",
@@ -637,7 +639,7 @@
           return renderStageSection("Status", "<p class='small-copy'>Diese Phase wurde noch nicht gestartet.</p>");
         }
         const output = stageOutput(pkg);
-        if (stage === "feasibility") {
+        if (["mvp_scope", "integration_feasibility", "risk_review"].includes(stage)) {
           return `
             <div class="stage-sections">
               ${renderStageSection(

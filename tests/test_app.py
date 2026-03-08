@@ -80,7 +80,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(dashboard.status_code, 200)
         payload = dashboard.json()
         self.assertEqual(payload["goal"]["id"], goal_id)
-        self.assertEqual(len(payload["packages"]), 3)
+        self.assertEqual(len(payload["packages"]), 5)
 
     def test_dashboard_requires_auth_when_enabled(self) -> None:
         os.environ["CODEX_AUTOMATE_REQUIRE_AUTH"] = "1"

@@ -78,9 +78,14 @@ class OrchestratorTests(unittest.TestCase):
         )
 
         packages = self.store.list_packages(goal_id=goal_id)
-        self.assertEqual([package["metadata"]["stage"] for package in packages], ["feasibility", "architecture", "breakdown"])
+        self.assertEqual(
+            [package["metadata"]["stage"] for package in packages],
+            ["mvp_scope", "integration_feasibility", "risk_review", "architecture", "breakdown"],
+        )
         self.assertEqual(packages[1]["dependency_ids"], [packages[0]["id"]])
         self.assertEqual(packages[2]["dependency_ids"], [packages[1]["id"]])
+        self.assertEqual(packages[3]["dependency_ids"], [packages[2]["id"]])
+        self.assertEqual(packages[4]["dependency_ids"], [packages[3]["id"]])
 
     def test_blockers_create_resolution_and_requeue_parent(self) -> None:
         self.store.register_agent("lead", ["orchestrator", "planning"])
@@ -518,19 +523,49 @@ result = {
     "new_packages": [],
     "stage_output": {}
 }
-if stage == "feasibility":
-    result["summary"] = "project is feasible with manageable delivery risk"
+if stage == "mvp_scope":
+    result["summary"] = "the first release is viable if the MVP stays focused on admin search, visibility and controlled offboarding actions"
     result["stage_output"] = {
         "verdict": "go",
         "key_points": [
-            "The goal is narrow enough to start with a staged planning flow.",
+            "The MVP can stay narrow around search, account visibility and guided offboarding.",
             "A planning-first approach reduces downstream rework."
         ],
         "risks": [
-            "Detailed delivery scope is still open and needs architecture framing."
+            "Scope will sprawl if license optimization and every SaaS edge case are included immediately."
         ],
         "open_questions": [
-            "Which roles need access to the first usable release?"
+            "Which admin roles need access to the first usable release?"
+        ]
+    }
+elif stage == "integration_feasibility":
+    result["summary"] = "a first wave of identity and SaaS integrations is feasible if the MVP prioritizes a few core systems"
+    result["stage_output"] = {
+        "verdict": "conditional",
+        "key_points": [
+            "The MVP should start with a small set of systems such as the identity provider, productivity suite and one collaboration platform.",
+            "API breadth varies, so connector scope must be intentionally prioritized."
+        ],
+        "risks": [
+            "Advanced deprovisioning and data transfer flows differ significantly between vendors."
+        ],
+        "open_questions": [
+            "Which systems are mandatory for the first release?"
+        ]
+    }
+elif stage == "risk_review":
+    result["summary"] = "the project should proceed with constraints around approvals, auditability and destructive actions"
+    result["stage_output"] = {
+        "verdict": "conditional",
+        "key_points": [
+            "The concept is viable if destructive actions are gated and fully auditable.",
+            "A dry-run mode is necessary before enabling real offboarding changes."
+        ],
+        "risks": [
+            "Offboarding workflows can create high-impact mistakes without approvals and rollback guidance."
+        ],
+        "open_questions": [
+            "Which approval policy applies to account disablement and license removal?"
         ]
     }
 elif stage == "architecture":
@@ -646,17 +681,19 @@ PY"""
             }
         )
 
-        result = self.runtime.run_autopilot(goal_id=goal_id, max_iterations=10)
+        result = self.runtime.run_autopilot(goal_id=goal_id, max_iterations=12)
         self.assertEqual(result["dashboard"]["goal"]["status"], "completed")
 
         packages = self.store.list_packages(goal_id=goal_id)
-        self.assertEqual(len(packages), 5)
+        self.assertEqual(len(packages), 7)
         stage_packages = {
             package["metadata"].get("stage"): package
             for package in packages
             if package["metadata"].get("stage")
         }
-        self.assertEqual(stage_packages["feasibility"]["metadata"]["stage_output"]["verdict"], "go")
+        self.assertEqual(stage_packages["mvp_scope"]["metadata"]["stage_output"]["verdict"], "go")
+        self.assertEqual(stage_packages["integration_feasibility"]["metadata"]["stage_output"]["verdict"], "conditional")
+        self.assertEqual(stage_packages["risk_review"]["metadata"]["stage_output"]["verdict"], "conditional")
         self.assertIn("Break the architecture", stage_packages["architecture"]["metadata"]["stage_output"]["handoff"])
         self.assertEqual(stage_packages["breakdown"]["metadata"]["stage_output"]["generated_package_count"], 2)
         generated = [package for package in packages if package["metadata"].get("generated_by_package_id")]
