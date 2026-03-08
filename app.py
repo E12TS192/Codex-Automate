@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
+import secrets
 from functools import lru_cache
 from importlib.resources import files
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -28,6 +31,52 @@ class GoalPayload(BaseModel):
 
 app = FastAPI(title="Codex Automate Control Plane", version="0.2.0")
 INDEX_HTML = files("codex_automate.assets").joinpath("dashboard.html").read_text(encoding="utf-8")
+BASIC_AUTH = HTTPBasic(auto_error=False)
+
+
+def _auth_required() -> bool:
+    if os.getenv("CODEX_AUTOMATE_REQUIRE_AUTH") is not None:
+        return os.getenv("CODEX_AUTOMATE_REQUIRE_AUTH", "").strip().lower() not in {"0", "false", "no", "off", ""}
+    return bool(os.getenv("VERCEL"))
+
+
+def _auth_configured() -> bool:
+    return bool(os.getenv("CODEX_AUTOMATE_AUTH_USERNAME") and os.getenv("CODEX_AUTOMATE_AUTH_PASSWORD"))
+
+
+def _unauthorized(detail: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"WWW-Authenticate": "Basic"},
+    )
+
+
+def require_operator_access(
+    request: Request,
+    credentials: Optional[HTTPBasicCredentials] = Depends(BASIC_AUTH),
+) -> None:
+    if request.url.path == "/api/health":
+        return
+    if not _auth_required():
+        return
+    if not _auth_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Dashboard auth is required, but CODEX_AUTOMATE_AUTH_USERNAME / "
+                "CODEX_AUTOMATE_AUTH_PASSWORD are not configured."
+            ),
+        )
+    if credentials is None:
+        raise _unauthorized("Authentication required.")
+
+    expected_username = os.getenv("CODEX_AUTOMATE_AUTH_USERNAME", "")
+    expected_password = os.getenv("CODEX_AUTOMATE_AUTH_PASSWORD", "")
+    username_ok = secrets.compare_digest(credentials.username, expected_username)
+    password_ok = secrets.compare_digest(credentials.password, expected_password)
+    if not (username_ok and password_ok):
+        raise _unauthorized("Invalid credentials.")
 
 
 @lru_cache
@@ -42,7 +91,7 @@ def get_orchestrator() -> Orchestrator:
     return Orchestrator(get_store())
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, dependencies=[Depends(require_operator_access)])
 def index() -> str:
     return INDEX_HTML
 
@@ -57,7 +106,7 @@ def health() -> Dict[str, Any]:
     }
 
 
-@app.get("/api/dashboard")
+@app.get("/api/dashboard", dependencies=[Depends(require_operator_access)])
 def dashboard(goal_id: Optional[int] = None) -> Dict[str, Any]:
     store = get_store()
     payload = get_orchestrator().dashboard(goal_id=goal_id)
@@ -68,7 +117,7 @@ def dashboard(goal_id: Optional[int] = None) -> Dict[str, Any]:
     return payload
 
 
-@app.post("/api/goals")
+@app.post("/api/goals", dependencies=[Depends(require_operator_access)])
 def submit_goal(payload: GoalPayload) -> Dict[str, Any]:
     goal_data = payload.model_dump()
     if goal_data["objective"] is None:
@@ -83,7 +132,7 @@ def submit_goal(payload: GoalPayload) -> Dict[str, Any]:
     }
 
 
-@app.post("/api/agents")
+@app.post("/api/agents", dependencies=[Depends(require_operator_access)])
 def register_agent(payload: AgentPayload) -> Dict[str, Any]:
     try:
         agent_id = get_store().register_agent(
@@ -99,6 +148,6 @@ def register_agent(payload: AgentPayload) -> Dict[str, Any]:
     }
 
 
-@app.post("/api/tick")
+@app.post("/api/tick", dependencies=[Depends(require_operator_access)])
 def tick() -> Dict[str, Any]:
     return get_orchestrator().tick()

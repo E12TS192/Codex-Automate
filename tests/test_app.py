@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import os
 import tempfile
 import unittest
@@ -21,7 +22,15 @@ class ApiTests(unittest.TestCase):
     def tearDown(self) -> None:
         get_store.cache_clear()
         os.environ.pop("CODEX_AUTOMATE_DATABASE_URL", None)
+        os.environ.pop("CODEX_AUTOMATE_REQUIRE_AUTH", None)
+        os.environ.pop("CODEX_AUTOMATE_AUTH_USERNAME", None)
+        os.environ.pop("CODEX_AUTOMATE_AUTH_PASSWORD", None)
+        os.environ.pop("VERCEL", None)
         self.temp_dir.cleanup()
+
+    def _basic_auth_header(self, username: str, password: str) -> dict[str, str]:
+        token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+        return {"Authorization": f"Basic {token}"}
 
     def test_health_and_dashboard(self) -> None:
         health = self.client.get("/api/health")
@@ -55,3 +64,31 @@ class ApiTests(unittest.TestCase):
         payload = dashboard.json()
         self.assertEqual(payload["goal"]["id"], goal_id)
         self.assertEqual(len(payload["packages"]), 1)
+
+    def test_dashboard_requires_auth_when_enabled(self) -> None:
+        os.environ["CODEX_AUTOMATE_REQUIRE_AUTH"] = "1"
+        os.environ["CODEX_AUTOMATE_AUTH_USERNAME"] = "alex"
+        os.environ["CODEX_AUTOMATE_AUTH_PASSWORD"] = "secret"
+
+        unauthenticated = self.client.get("/api/dashboard")
+        self.assertEqual(unauthenticated.status_code, 401)
+
+        authenticated = self.client.get(
+            "/api/dashboard",
+            headers=self._basic_auth_header("alex", "secret"),
+        )
+        self.assertEqual(authenticated.status_code, 200)
+
+    def test_auth_fails_closed_when_required_but_not_configured(self) -> None:
+        os.environ["CODEX_AUTOMATE_REQUIRE_AUTH"] = "1"
+
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 503)
+
+    def test_health_stays_public_when_auth_is_enabled(self) -> None:
+        os.environ["CODEX_AUTOMATE_REQUIRE_AUTH"] = "1"
+        os.environ["CODEX_AUTOMATE_AUTH_USERNAME"] = "alex"
+        os.environ["CODEX_AUTOMATE_AUTH_PASSWORD"] = "secret"
+
+        response = self.client.get("/api/health")
+        self.assertEqual(response.status_code, 200)

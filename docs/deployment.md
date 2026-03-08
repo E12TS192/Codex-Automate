@@ -34,6 +34,8 @@ Die App akzeptiert `CODEX_AUTOMATE_DATABASE_URL`, `DATABASE_URL` oder `POSTGRES_
 
 ```bash
 CODEX_AUTOMATE_DATABASE_URL=postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require
+CODEX_AUTOMATE_AUTH_USERNAME=operator
+CODEX_AUTOMATE_AUTH_PASSWORD=CHANGE_ME
 ```
 
 3. Deploy starten
@@ -49,6 +51,7 @@ Die Vercel-App stellt bereit:
 
 Die aktuelle App nutzt Vercels Python/FastAPI zero-config ueber [app.py](/Users/alex/Projects/git/Codex Automate/app.py), also bewusst kein eigenes `vercel.json`.
 Ohne `CODEX_AUTOMATE_DATABASE_URL` faellt sie auf `/tmp/codex_automate.sqlite3` zurueck, was nur fuer kurzfristige Tests taugt.
+Wenn `CODEX_AUTOMATE_REQUIRE_AUTH` nicht explizit deaktiviert ist, erwartet die App auf Vercel HTTP Basic Auth fuer `/` und alle API-Endpunkte ausser `/api/health`. Fehlen Benutzername oder Passwort, antwortet die App bewusst mit `503`, statt offen zu bleiben.
 
 ## 4. Worker Host
 

@@ -73,6 +73,8 @@ python3 -m codex_automate serve-workers --max-cycles 10 --stop-when-idle
 - Worker-Host: Startskript in [start-worker-host.sh](/Users/alex/Projects/git/Codex Automate/scripts/start-worker-host.sh), Container-Image in [Dockerfile.worker](/Users/alex/Projects/git/Codex Automate/Dockerfile.worker), `systemd`-Unit in [codex-automate-worker.service](/Users/alex/Projects/git/Codex Automate/deploy/systemd/codex-automate-worker.service)
 - macOS Auto-Start: `launchd`-Template in [com.alex.codex-automate-worker.plist](/Users/alex/Projects/git/Codex Automate/deploy/launchd/com.alex.codex-automate-worker.plist) und Installer in [install-launchd-worker.sh](/Users/alex/Projects/git/Codex Automate/scripts/install-launchd-worker.sh)
 
+Das Dashboard ist jetzt per HTTP Basic Auth absicherbar. In Hosted-Umgebungen wie Vercel wird Auth standardmaessig erwartet; die Zugangsdaten kommen aus `CODEX_AUTOMATE_AUTH_USERNAME` und `CODEX_AUTOMATE_AUTH_PASSWORD`.
+
 Die konkrete Deploy-Reihenfolge steht in [docs/deployment.md](/Users/alex/Projects/git/Codex Automate/docs/deployment.md).
 Ohne gesetzte Datenbank-URL faellt Vercel bewusst nur auf eine temporaere SQLite-Datei unter `/tmp` zurueck.
 
