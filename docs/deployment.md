@@ -47,6 +47,9 @@ Die Vercel-App stellt bereit:
 - `/api/agents`
 - `/api/tick`
 
+Die aktuelle App nutzt Vercels Python/FastAPI zero-config ueber [app.py](/Users/alex/Projects/git/Codex Automate/app.py), also bewusst kein eigenes `vercel.json`.
+Ohne `CODEX_AUTOMATE_DATABASE_URL` faellt sie auf `/tmp/codex_automate.sqlite3` zurueck, was nur fuer kurzfristige Tests taugt.
+
 ## 4. Worker Host
 
 Der Worker-Host braucht dieselbe Datenbankverbindung und das Repository als Arbeitsverzeichnis. Typischer Start:
@@ -58,4 +61,3 @@ python3 -m codex_automate autopilot --max-iterations 20
 ```
 
 Fuer echten Dauerbetrieb sollte der Worker-Loop als Prozessmanager-Job oder Service laufen.
-

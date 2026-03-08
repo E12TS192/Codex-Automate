@@ -14,6 +14,7 @@ except ImportError:  # pragma: no cover - exercised only when postgres support i
 
 
 DEFAULT_SQLITE_TARGET = "state/codex_automate.sqlite3"
+VERCEL_SQLITE_TARGET = "/tmp/codex_automate.sqlite3"
 
 SQLITE_SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -164,13 +165,17 @@ CREATE INDEX IF NOT EXISTS idx_events_entity
 
 
 def resolve_database_target(explicit_target: Optional[str] = None) -> str:
-    return (
+    configured = (
         explicit_target
         or os.getenv("CODEX_AUTOMATE_DATABASE_URL")
         or os.getenv("DATABASE_URL")
         or os.getenv("POSTGRES_URL")
-        or DEFAULT_SQLITE_TARGET
     )
+    if configured:
+        return configured
+    if os.getenv("VERCEL"):
+        return VERCEL_SQLITE_TARGET
+    return DEFAULT_SQLITE_TARGET
 
 
 def is_postgres_target(target: str) -> bool:

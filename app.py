@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from pathlib import Path
+from importlib.resources import files
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -27,7 +27,7 @@ class GoalPayload(BaseModel):
 
 
 app = FastAPI(title="Codex Automate Control Plane", version="0.2.0")
-INDEX_HTML = (Path(__file__).resolve().parent / "public" / "index.html").read_text(encoding="utf-8")
+INDEX_HTML = files("codex_automate.assets").joinpath("dashboard.html").read_text(encoding="utf-8")
 
 
 @lru_cache

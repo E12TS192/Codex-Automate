@@ -25,4 +25,4 @@ codex-automate = "codex_automate.cli:main"
 include = ["codex_automate*"]
 
 [tool.setuptools.package-data]
-codex_automate = ["schemas/*.json"]
+codex_automate = ["schemas/*.json", "assets/*.html"]

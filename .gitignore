@@ -4,3 +4,4 @@ __pycache__/
 .pytest_cache/
 state/*.sqlite3
 state/runs/
+.vercel

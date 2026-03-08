@@ -31,7 +31,7 @@ def _as_timestamp(value: Optional[datetime] = None) -> str:
 
 
 def _json_dumps(value: Any) -> str:
-    return json.dumps(value or {}, ensure_ascii=True, sort_keys=True)
+    return json.dumps({} if value is None else value, ensure_ascii=True, sort_keys=True)
 
 
 def _json_loads(value: Optional[str], default: Any) -> Any:

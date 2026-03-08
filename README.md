@@ -68,10 +68,11 @@ python3 -m codex_automate autopilot --max-iterations 10
 
 - GitHub: vorbereitet ueber [.github/workflows/ci.yml](/Users/alex/Projects/git/Codex Automate/.github/workflows/ci.yml)
 - Neon / Postgres: per `CODEX_AUTOMATE_DATABASE_URL`, `DATABASE_URL` oder `POSTGRES_URL`
-- Vercel: HTTP-Control-Plane ueber [app.py](/Users/alex/Projects/git/Codex Automate/app.py) und [vercel.json](/Users/alex/Projects/git/Codex Automate/vercel.json)
-- Dashboard: statisch in [public/index.html](/Users/alex/Projects/git/Codex Automate/public/index.html)
+- Vercel: HTTP-Control-Plane zero-config ueber [app.py](/Users/alex/Projects/git/Codex Automate/app.py)
+- Dashboard: als Paket-Asset in [dashboard.html](/Users/alex/Projects/git/Codex Automate/codex_automate/assets/dashboard.html)
 
 Die konkrete Deploy-Reihenfolge steht in [docs/deployment.md](/Users/alex/Projects/git/Codex Automate/docs/deployment.md).
+Ohne gesetzte Datenbank-URL faellt Vercel bewusst nur auf eine temporaere SQLite-Datei unter `/tmp` zurueck.
 
 ## Aktueller Stand
 
