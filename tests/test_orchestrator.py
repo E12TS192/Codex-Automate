@@ -423,6 +423,21 @@ PY"""
         dashboard = orchestrator.dashboard(goal_id)
         self.assertEqual(dashboard["goal"]["status"], "blocked")
 
+    def test_monitored_process_accepts_stdin_without_repeated_communicate(self) -> None:
+        completed = self.runtime._run_monitored_process(
+            command=["/bin/cat"],
+            cwd=self.workspace_root,
+            env={},
+            input_text="worker stdin smoke\n",
+            shell=False,
+            agent_id=self.store.register_agent("stdin-smoke", ["planning"]),
+            runner={"timeout_seconds": 2, "heartbeat_interval_seconds": 0.1},
+        )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout, "worker stdin smoke\n")
+        self.assertEqual(completed.stderr, "")
+
 
 if __name__ == "__main__":
     unittest.main()

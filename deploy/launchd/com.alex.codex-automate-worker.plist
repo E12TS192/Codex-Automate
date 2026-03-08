@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.alex.codex-automate-worker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/alex/Projects/git/Codex Automate/scripts/start-worker-host.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/alex/Projects/git/Codex Automate</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CODEX_AUTOMATE_ENV_FILE</key>
+    <string>/Users/alex/Library/Application Support/CodexAutomate/worker.env</string>
+    <key>PATH</key>
+    <string>/Applications/Codex.app/Contents/Resources:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>KeepAlive</key>
+  <true/>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/alex/Library/Logs/CodexAutomate/worker.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/alex/Library/Logs/CodexAutomate/worker.err.log</string>
+</dict>
+</plist>

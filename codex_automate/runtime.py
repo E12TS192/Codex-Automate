@@ -280,7 +280,13 @@ class WorkerRuntime:
                     )
                 wait_timeout = min(wait_timeout, remaining)
             try:
-                stdout_text, stderr_text = process.communicate(timeout=wait_timeout)
+                process.wait(timeout=wait_timeout)
+                stdout_text = process.stdout.read() if process.stdout is not None else ""
+                stderr_text = process.stderr.read() if process.stderr is not None else ""
+                if process.stdout is not None:
+                    process.stdout.close()
+                if process.stderr is not None:
+                    process.stderr.close()
                 return subprocess.CompletedProcess(
                     args=command,
                     returncode=process.returncode or 0,

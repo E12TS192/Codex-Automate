@@ -115,3 +115,24 @@ docker run --rm \
 ```
 
 Wichtig: das Image installiert das Projekt selbst, aber nicht automatisch die `codex`-CLI. Fuer reine Shell-Runner reicht das aus. Fuer `codex_exec`-Agenten muss das Image oder der Host die `codex`-CLI zusaetzlich bereitstellen.
+
+## 8. macOS launchd
+
+Fuer diese Maschine liegt ein User-`launchd`-Pfad bereit:
+
+- Template: [com.alex.codex-automate-worker.plist](/Users/alex/Projects/git/Codex Automate/deploy/launchd/com.alex.codex-automate-worker.plist)
+- Installer: [install-launchd-worker.sh](/Users/alex/Projects/git/Codex Automate/scripts/install-launchd-worker.sh)
+
+Der Installer:
+
+- legt `~/Library/Application Support/CodexAutomate/worker.env` an, falls noch nicht vorhanden
+- installiert das plist unter `~/Library/LaunchAgents/`
+- bootstrapped und kickstarted den Worker sofort
+- startet ihn bei Login und nach Neustarts automatisch wieder
+
+Typischer Ablauf:
+
+```bash
+chmod +x scripts/install-launchd-worker.sh scripts/start-worker-host.sh
+./scripts/install-launchd-worker.sh
+```
