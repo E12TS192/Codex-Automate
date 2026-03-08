@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import threading
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -247,6 +249,179 @@ PY"""
         result = self.runtime.run_autopilot(goal_id=goal_id, max_iterations=6)
         self.assertEqual(result["dashboard"]["goal"]["status"], "completed")
         self.assertGreaterEqual(len(result["timeline"]), 3)
+
+    def test_service_loop_runs_until_idle_or_complete(self) -> None:
+        command = """python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+Path(os.environ["CODEX_AUTOMATE_RESULT_FILE"]).write_text(
+    json.dumps({
+        "status": "completed",
+        "summary": "service worker completed the package",
+        "blocker_reason": "",
+        "artifacts": [],
+        "notes": []
+    }),
+    encoding="utf-8",
+)
+PY"""
+        self.store.register_agent(
+            "service-planner",
+            ["planning"],
+            metadata={
+                "runner": {
+                    "type": "shell",
+                    "command": command,
+                    "cwd": str(self.workspace_root),
+                }
+            },
+        )
+        goal_id = self.orchestrator.submit_goal_from_dict(
+            {
+                "title": "Service loop test",
+                "packages": [
+                    {
+                        "title": "Single service package",
+                        "description": "Complete through the poll loop",
+                        "capability": "planning",
+                        "priority": 100,
+                    }
+                ],
+            }
+        )
+
+        result = self.runtime.run_service(
+            goal_id=goal_id,
+            poll_seconds=0,
+            max_cycles=3,
+            agent_names=["service-planner"],
+            stop_when_idle=True,
+        )
+        self.assertEqual(result["dashboard"]["goal"]["status"], "completed")
+        self.assertGreaterEqual(len(result["cycles"]), 1)
+
+    def test_long_running_worker_renews_lease_until_completion(self) -> None:
+        orchestrator = Orchestrator(self.store, lease_seconds=1, resolution_capability="orchestrator")
+        runtime = WorkerRuntime(
+            store=self.store,
+            workspace_root=str(self.workspace_root),
+            orchestrator=orchestrator,
+        )
+        command = """python3 - <<'PY'
+import json
+import os
+import time
+from pathlib import Path
+
+time.sleep(2.0)
+Path(os.environ["CODEX_AUTOMATE_RESULT_FILE"]).write_text(
+    json.dumps({
+        "status": "completed",
+        "summary": "slow worker completed after renewing its lease",
+        "blocker_reason": "",
+        "artifacts": [],
+        "notes": []
+    }),
+    encoding="utf-8",
+)
+PY"""
+        self.store.register_agent(
+            "slow-planner",
+            ["planning"],
+            metadata={
+                "runner": {
+                    "type": "shell",
+                    "command": command,
+                    "cwd": str(self.workspace_root),
+                    "timeout_seconds": 5,
+                    "heartbeat_interval_seconds": 0.2,
+                }
+            },
+        )
+        goal_id = orchestrator.submit_goal_from_dict(
+            {
+                "title": "Lease renewal test",
+                "packages": [
+                    {
+                        "title": "Slow package",
+                        "description": "Run long enough that lease renewal matters",
+                        "capability": "planning",
+                        "priority": 100,
+                    }
+                ],
+            }
+        )
+
+        orchestrator.tick()
+        result_holder: dict[str, object] = {}
+        worker_thread = threading.Thread(
+            target=lambda: result_holder.setdefault("result", runtime.run_agent_once("slow-planner")),
+            daemon=True,
+        )
+        worker_thread.start()
+        time.sleep(1.4)
+
+        expired = self.store.expire_assignments()
+        worker_thread.join(timeout=6)
+
+        self.assertEqual(expired, [])
+        self.assertFalse(worker_thread.is_alive())
+        self.assertEqual(result_holder["result"]["outcome"], "completed")
+        dashboard = orchestrator.dashboard(goal_id)
+        self.assertEqual(dashboard["goal"]["status"], "completed")
+
+    def test_worker_timeout_marks_package_blocked(self) -> None:
+        orchestrator = Orchestrator(self.store, lease_seconds=10, resolution_capability="orchestrator")
+        runtime = WorkerRuntime(
+            store=self.store,
+            workspace_root=str(self.workspace_root),
+            orchestrator=orchestrator,
+        )
+        command = """python3 - <<'PY'
+import time
+
+time.sleep(2.0)
+PY"""
+        self.store.register_agent(
+            "timeout-qa",
+            ["qa"],
+            metadata={
+                "runner": {
+                    "type": "shell",
+                    "command": command,
+                    "cwd": str(self.workspace_root),
+                    "timeout_seconds": 0.5,
+                    "heartbeat_interval_seconds": 0.1,
+                }
+            },
+        )
+        goal_id = orchestrator.submit_goal_from_dict(
+            {
+                "title": "Timeout handling test",
+                "packages": [
+                    {
+                        "title": "Hung package",
+                        "description": "Block when the runner exceeds its timeout",
+                        "capability": "qa",
+                        "priority": 100,
+                    }
+                ],
+            }
+        )
+
+        orchestrator.tick()
+        result = runtime.run_agent_once("timeout-qa")
+
+        self.assertEqual(result["outcome"], "blocked")
+        self.assertEqual(result["package_title"], "Hung package")
+        package = self.store.list_packages(goal_id=goal_id)[0]
+        self.assertEqual(package["status"], "blocked")
+        self.assertIn("exceeded 0.5s", package["blocker_reason"])
+        self.assertEqual(package["metadata"]["latest_run"]["status"], "blocked")
+        dashboard = orchestrator.dashboard(goal_id)
+        self.assertEqual(dashboard["goal"]["status"], "blocked")
 
 
 if __name__ == "__main__":

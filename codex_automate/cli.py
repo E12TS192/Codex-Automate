@@ -68,6 +68,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         help="Additional writable directory for the worker. Repeatable.",
     )
+    register_parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        help="Hard timeout for one worker run. Defaults to the orchestrator lease length.",
+    )
+    register_parser.add_argument(
+        "--heartbeat-interval-seconds",
+        type=float,
+        help="Heartbeat cadence while a worker process is running.",
+    )
 
     goal_parser = subparsers.add_parser("submit-goal", help="Submit a goal from a JSON file.")
     add_database_argument(goal_parser)
@@ -83,6 +93,41 @@ def build_parser() -> argparse.ArgumentParser:
         "--workspace",
         default=str(Path.cwd()),
         help="Workspace root used for run artifacts and prompts.",
+    )
+
+    service_parser = subparsers.add_parser("serve-workers", help="Run a poll loop for the worker host.")
+    add_database_argument(service_parser)
+    service_parser.add_argument(
+        "--workspace",
+        default=str(Path.cwd()),
+        help="Workspace root used for run artifacts and prompts.",
+    )
+    service_parser.add_argument(
+        "--poll-seconds",
+        type=float,
+        default=5.0,
+        help="Sleep interval between worker cycles.",
+    )
+    service_parser.add_argument(
+        "--max-cycles",
+        type=int,
+        help="Optional upper bound for service cycles.",
+    )
+    service_parser.add_argument(
+        "--goal-id",
+        type=int,
+        help="Restrict the service view to one goal.",
+    )
+    service_parser.add_argument(
+        "--agent",
+        action="append",
+        default=[],
+        help="Only manage the given agent names. Repeatable.",
+    )
+    service_parser.add_argument(
+        "--stop-when-idle",
+        action="store_true",
+        help="Exit when one cycle completes without assignments or worker runs.",
     )
 
     autopilot_parser = subparsers.add_parser("autopilot", help="Run orchestrator + workers until stable or complete.")
@@ -213,6 +258,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             runner["cwd"] = str(Path(args.cwd).resolve())
         if args.model:
             runner["model"] = args.model
+        if args.timeout_seconds is not None:
+            runner["timeout_seconds"] = args.timeout_seconds
+        if args.heartbeat_interval_seconds is not None:
+            runner["heartbeat_interval_seconds"] = args.heartbeat_interval_seconds
         metadata = {"runner": runner}
         agent_id = store.register_agent(args.name, args.capabilities, metadata=metadata)
         print(f"Registered agent {args.name} as #{agent_id}")
@@ -233,6 +282,38 @@ def main(argv: Optional[List[str]] = None) -> int:
         runtime = WorkerRuntime(store=store, workspace_root=args.workspace, orchestrator=orchestrator)
         result = runtime.run_agent_once(args.name)
         print(json.dumps(result, indent=2, ensure_ascii=True))
+        return 0
+
+    if args.command == "serve-workers":
+        runtime = WorkerRuntime(store=store, workspace_root=args.workspace, orchestrator=orchestrator)
+        result = runtime.run_service(
+            goal_id=args.goal_id,
+            poll_seconds=args.poll_seconds,
+            max_cycles=args.max_cycles,
+            agent_names=args.agent or None,
+            stop_when_idle=args.stop_when_idle,
+        )
+        dashboard = result["dashboard"]
+        if dashboard.get("goal"):
+            print(
+                f"Worker service stopped with goal #{dashboard['goal']['id']} "
+                f"in status {dashboard['goal']['status']}"
+            )
+        else:
+            print("Worker service stopped without an active goal selection")
+        _print_dashboard(dashboard)
+        _print_heading("Cycles")
+        for item in result["cycles"]:
+            print(
+                f"cycle={item['iteration']} status={item['goal_status']} "
+                f"assignments={len(item['tick']['assignments'])} "
+                f"worker_runs={len(item['worker_results'])}"
+            )
+            for worker_result in item["worker_results"]:
+                print(
+                    f"  - {worker_result['agent_name']} -> {worker_result['outcome']} "
+                    f"({worker_result['summary']})"
+                )
         return 0
 
     if args.command == "autopilot":

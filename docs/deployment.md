@@ -55,9 +55,16 @@ Ohne `CODEX_AUTOMATE_DATABASE_URL` faellt sie auf `/tmp/codex_automate.sqlite3` 
 Der Worker-Host braucht dieselbe Datenbankverbindung und das Repository als Arbeitsverzeichnis. Typischer Start:
 
 ```bash
-python3 -m codex_automate register-agent --name lead --capability orchestrator --capability planning
-python3 -m codex_automate register-agent --name qa --capability qa
-python3 -m codex_automate autopilot --max-iterations 20
+python3 -m codex_automate register-agent --name lead --capability orchestrator --capability planning --cwd /srv/codex-automate --timeout-seconds 900
+python3 -m codex_automate register-agent --name qa --capability qa --cwd /srv/codex-automate --timeout-seconds 900
+python3 -m codex_automate serve-workers --workspace /srv/codex-automate --poll-seconds 5
 ```
+
+`serve-workers` ist der empfohlene Dauerprozess. Er fuehrt pro Poll-Zyklus `tick -> Heartbeats -> Worker-Runs` aus und kann auf einzelne Goals oder Agenten eingeschraenkt werden.
+
+Wichtige Runner-Parameter:
+
+- `--timeout-seconds`: harte Obergrenze fuer einen Worker-Run; haengende Runs werden als Blocker markiert
+- `--heartbeat-interval-seconds`: wie oft waehrend eines laufenden Runs die Lease aktiv verlaengert wird
 
 Fuer echten Dauerbetrieb sollte der Worker-Loop als Prozessmanager-Job oder Service laufen.

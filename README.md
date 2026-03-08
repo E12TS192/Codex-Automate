@@ -30,11 +30,11 @@ python3 -m codex_automate dashboard
 Echte Worker mit Codex CLI starten:
 
 ```bash
-python3 -m codex_automate register-agent --name lead --capability orchestrator --capability planning --instruction "Du loest Blocker und planst Folgearbeit."
+python3 -m codex_automate register-agent --name lead --capability orchestrator --capability planning --instruction "Du loest Blocker und planst Folgearbeit." --timeout-seconds 900
 python3 -m codex_automate register-agent --name builder --capability backend --instruction "Du implementierst nur das dir zugewiesene Paket."
 python3 -m codex_automate register-agent --name qa --capability qa --instruction "Du validierst nur das dir zugewiesene Paket."
 python3 -m codex_automate submit-goal --file examples/demo_goal.json
-python3 -m codex_automate autopilot --max-iterations 10
+python3 -m codex_automate serve-workers --max-cycles 10 --stop-when-idle
 ```
 
 HTTP-Control-Plane lokal starten:
@@ -61,7 +61,7 @@ python3 -m codex_automate register-agent --name lead --capability orchestrator -
 python3 -m codex_automate register-agent --name builder --capability backend
 python3 -m codex_automate register-agent --name qa --capability qa
 python3 -m codex_automate submit-goal --file examples/demo_goal.json
-python3 -m codex_automate autopilot --max-iterations 10
+python3 -m codex_automate serve-workers --max-cycles 10 --stop-when-idle
 ```
 
 ## Hosting
@@ -82,6 +82,8 @@ Implementiert:
 - umschaltbarer Datenbank-Target fuer SQLite oder Postgres/Neon
 - Orchestrator-Control-Loop fuer Scheduling, Lease-Recovery und Blocker-Resolution
 - echter Worker-Runner fuer `codex exec` plus shell-basierter Test-Runner
+- poll-basierter Worker-Host ueber `serve-workers` fuer getrennten Dauerbetrieb gegen dieselbe Datenbank
+- Lease-Renewal per Heartbeat waehrend laufender Worker-Prozesse plus Timeout-Schutz fuer haengende Runs
 - FastAPI-Control-Plane und statisches Dashboard fuer Vercel
 - CLI fuer Bootstrap, Agent-Registry, Goal-Submission, Tick, Worker-Run, Autopilot und Dashboard
 - Demo-Simulation mit drei Agenten und einem absichtlich erzeugten Blocker
@@ -89,6 +91,5 @@ Implementiert:
 Noch offen:
 
 - parallelisierte Worker-Ausfuehrung statt rein sequenziellem Autopilot-Loop
-- echte Live-Verifikation gegen eine echte Neon-Datenbank
 - Priorisierung ueber Business Impact, Kosten und Deadline
 - Benachrichtigungen und Monitoring

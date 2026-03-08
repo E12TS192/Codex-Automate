@@ -322,6 +322,7 @@ class StateStore:
         agent_id: int,
         status: Optional[str] = None,
         note: Optional[str] = None,
+        lease_seconds: Optional[int] = None,
     ) -> None:
         with self.connect() as conn:
             agent = conn.execute(
@@ -330,6 +331,7 @@ class StateStore:
             ).fetchone()
             if agent is None:
                 raise ValueError(f"Unknown agent {agent_id}")
+            now = _utcnow()
             new_status = status or agent["status"]
             conn.execute(
                 """
@@ -337,14 +339,38 @@ class StateStore:
                 SET last_heartbeat_at = ?, status = ?
                 WHERE id = ?
                 """,
-                (_as_timestamp(), new_status, agent_id),
+                (_as_timestamp(now), new_status, agent_id),
             )
+            payload: Dict[str, Any] = {"status": new_status, "note": note}
+            if agent["current_package_id"] is not None and lease_seconds is not None:
+                assignment = conn.execute(
+                    """
+                    SELECT id
+                    FROM assignments
+                    WHERE package_id = ? AND agent_id = ? AND status IN (?, ?)
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (
+                        int(agent["current_package_id"]),
+                        agent_id,
+                        AssignmentStatus.ASSIGNED.value,
+                        AssignmentStatus.ACTIVE.value,
+                    ),
+                ).fetchone()
+                if assignment is not None:
+                    lease_expires_at = _as_timestamp(now + timedelta(seconds=lease_seconds))
+                    conn.execute(
+                        "UPDATE assignments SET lease_expires_at = ? WHERE id = ?",
+                        (lease_expires_at, int(assignment["id"])),
+                    )
+                    payload["lease_expires_at"] = lease_expires_at
             self._record_event(
                 conn,
                 "agent",
                 agent_id,
                 EventType.AGENT_HEARTBEAT.value,
-                {"status": new_status, "note": note},
+                payload,
             )
 
     def list_goals(self) -> List[Dict[str, Any]]:

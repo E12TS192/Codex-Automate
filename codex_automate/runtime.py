@@ -4,10 +4,11 @@ import json
 import os
 import shlex
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from codex_automate.models import AgentStatus, GoalStatus
 from codex_automate.orchestrator import Orchestrator
@@ -16,6 +17,23 @@ from codex_automate.state import StateStore
 
 def _utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+
+
+class RunnerTimeoutError(RuntimeError):
+    def __init__(
+        self,
+        timeout_seconds: float,
+        elapsed_seconds: float,
+        return_code: int,
+        stdout: str,
+        stderr: str,
+    ) -> None:
+        super().__init__(f"Runner timed out after {elapsed_seconds:.1f}s")
+        self.timeout_seconds = timeout_seconds
+        self.elapsed_seconds = elapsed_seconds
+        self.return_code = return_code
+        self.stdout = stdout
+        self.stderr = stderr
 
 
 class WorkerRuntime:
@@ -43,7 +61,38 @@ class WorkerRuntime:
         runner.setdefault("add_dirs", [])
         runner.setdefault("ephemeral", True)
         runner.setdefault("skip_git_repo_check", True)
+        timeout_seconds = runner.get("timeout_seconds")
+        if timeout_seconds in (None, ""):
+            runner["timeout_seconds"] = float(self.orchestrator.lease_seconds)
+        else:
+            runner["timeout_seconds"] = float(timeout_seconds)
+        heartbeat_interval = runner.get("heartbeat_interval_seconds")
+        if heartbeat_interval in (None, ""):
+            runner["heartbeat_interval_seconds"] = max(1.0, min(30.0, float(self.orchestrator.lease_seconds) / 3.0))
+        else:
+            runner["heartbeat_interval_seconds"] = float(heartbeat_interval)
         return runner
+
+    def _select_agents(self, agent_names: Optional[Sequence[str]] = None) -> List[Dict[str, Any]]:
+        agents = self.store.list_agents()
+        if not agent_names:
+            return agents
+        selected = set(agent_names)
+        return [agent for agent in agents if agent["name"] in selected]
+
+    def heartbeat_agents(self, agent_names: Optional[Sequence[str]] = None) -> List[Dict[str, Any]]:
+        heartbeats: List[Dict[str, Any]] = []
+        for agent in self._select_agents(agent_names):
+            status = AgentStatus.BUSY.value if agent["current_package_id"] else AgentStatus.IDLE.value
+            self.store.heartbeat(agent["id"], status=status, lease_seconds=self.orchestrator.lease_seconds)
+            heartbeats.append(
+                {
+                    "agent_id": agent["id"],
+                    "agent_name": agent["name"],
+                    "status": status,
+                }
+            )
+        return heartbeats
 
     def _resolve_path(self, maybe_path: str) -> Path:
         path = Path(maybe_path)
@@ -185,29 +234,109 @@ class WorkerRuntime:
             return self._resolve_path(runner["cwd"])
         return self.workspace_root
 
-    def _run_shell_runner(self, runner: Dict[str, Any], paths: Dict[str, Path], run_dir: Path) -> subprocess.CompletedProcess[str]:
+    def _run_monitored_process(
+        self,
+        *,
+        command: Sequence[str] | str,
+        cwd: Path,
+        env: Dict[str, str],
+        input_text: Optional[str],
+        shell: bool,
+        agent_id: int,
+        runner: Dict[str, Any],
+    ) -> subprocess.CompletedProcess[str]:
+        timeout_seconds = runner.get("timeout_seconds")
+        heartbeat_interval = max(0.1, float(runner.get("heartbeat_interval_seconds", 30.0)))
+        process = subprocess.Popen(
+            command,
+            cwd=str(cwd),
+            env=env,
+            stdin=subprocess.PIPE if input_text is not None else None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            shell=shell,
+            executable="/bin/zsh" if shell else None,
+        )
+        if input_text is not None and process.stdin is not None:
+            process.stdin.write(input_text)
+            process.stdin.close()
+
+        started_at = time.monotonic()
+        while True:
+            wait_timeout = heartbeat_interval
+            if timeout_seconds is not None:
+                elapsed = time.monotonic() - started_at
+                remaining = float(timeout_seconds) - elapsed
+                if remaining <= 0:
+                    process.kill()
+                    stdout_text, stderr_text = process.communicate()
+                    raise RunnerTimeoutError(
+                        timeout_seconds=float(timeout_seconds),
+                        elapsed_seconds=elapsed,
+                        return_code=process.returncode or -9,
+                        stdout=stdout_text,
+                        stderr=stderr_text,
+                    )
+                wait_timeout = min(wait_timeout, remaining)
+            try:
+                stdout_text, stderr_text = process.communicate(timeout=wait_timeout)
+                return subprocess.CompletedProcess(
+                    args=command,
+                    returncode=process.returncode or 0,
+                    stdout=stdout_text,
+                    stderr=stderr_text,
+                )
+            except subprocess.TimeoutExpired:
+                self.store.heartbeat(
+                    agent_id,
+                    status=AgentStatus.BUSY.value,
+                    lease_seconds=self.orchestrator.lease_seconds,
+                )
+
+    def _run_shell_runner(
+        self,
+        agent_id: int,
+        runner: Dict[str, Any],
+        paths: Dict[str, Path],
+        run_dir: Path,
+    ) -> subprocess.CompletedProcess[str]:
         command = runner.get("command")
         if not command:
             raise ValueError("Shell runner requires a command.")
         formatted_command = self._format_shell_command(command, paths, run_dir)
         paths["command"].write_text(
-            json.dumps({"runner_type": "shell", "command": formatted_command}, indent=2, ensure_ascii=True),
+            json.dumps(
+                {
+                    "runner_type": "shell",
+                    "command": formatted_command,
+                    "timeout_seconds": runner.get("timeout_seconds"),
+                    "heartbeat_interval_seconds": runner.get("heartbeat_interval_seconds"),
+                },
+                indent=2,
+                ensure_ascii=True,
+            ),
             encoding="utf-8",
         )
-        completed = subprocess.run(
-            formatted_command,
-            cwd=str(self._resolve_cwd(runner)),
+        completed = self._run_monitored_process(
+            command=formatted_command,
+            cwd=self._resolve_cwd(runner),
             env=self._shell_env(paths, run_dir),
+            input_text=None,
             shell=True,
-            executable="/bin/zsh",
-            text=True,
-            capture_output=True,
+            agent_id=agent_id,
+            runner=runner,
         )
         paths["stdout"].write_text(completed.stdout, encoding="utf-8")
         paths["stderr"].write_text(completed.stderr, encoding="utf-8")
         return completed
 
-    def _run_codex_exec(self, runner: Dict[str, Any], paths: Dict[str, Path]) -> subprocess.CompletedProcess[str]:
+    def _run_codex_exec(
+        self,
+        agent_id: int,
+        runner: Dict[str, Any],
+        paths: Dict[str, Path],
+    ) -> subprocess.CompletedProcess[str]:
         command: List[str] = [
             "codex",
             "exec",
@@ -231,16 +360,26 @@ class WorkerRuntime:
             command.extend(["--add-dir", str(self._resolve_path(add_dir))])
         command.extend(["-C", str(self._resolve_cwd(runner)), "-"])
         paths["command"].write_text(
-            json.dumps({"runner_type": "codex_exec", "command": command}, indent=2, ensure_ascii=True),
+            json.dumps(
+                {
+                    "runner_type": "codex_exec",
+                    "command": command,
+                    "timeout_seconds": runner.get("timeout_seconds"),
+                    "heartbeat_interval_seconds": runner.get("heartbeat_interval_seconds"),
+                },
+                indent=2,
+                ensure_ascii=True,
+            ),
             encoding="utf-8",
         )
-        completed = subprocess.run(
-            command,
-            cwd=str(self._resolve_cwd(runner)),
+        completed = self._run_monitored_process(
+            command=command,
+            cwd=self._resolve_cwd(runner),
             env=self._shell_env(paths, paths["command"].parent),
-            input=paths["prompt"].read_text(encoding="utf-8"),
-            text=True,
-            capture_output=True,
+            input_text=paths["prompt"].read_text(encoding="utf-8"),
+            shell=False,
+            agent_id=agent_id,
+            runner=runner,
         )
         paths["stdout"].write_text(completed.stdout, encoding="utf-8")
         paths["stderr"].write_text(completed.stderr, encoding="utf-8")
@@ -302,6 +441,23 @@ class WorkerRuntime:
             "notes": [],
         }
 
+    def _runner_timeout_payload(self, error: RunnerTimeoutError, run_dir: Path, stderr_path: Path) -> Dict[str, Any]:
+        error_excerpt = error.stderr.strip()
+        if error_excerpt:
+            error_excerpt = error_excerpt.splitlines()[-1]
+        else:
+            error_excerpt = "No stderr output captured."
+        return {
+            "status": "blocked",
+            "summary": "Worker execution timed out",
+            "blocker_reason": (
+                f"Runner exceeded {error.timeout_seconds:.1f}s and was stopped after "
+                f"{error.elapsed_seconds:.1f}s. See {run_dir}. Last stderr line: {error_excerpt}"
+            ),
+            "artifacts": [{"path": str(stderr_path), "description": "Runner stderr"}],
+            "notes": [],
+        }
+
     def run_agent_once(self, agent_name: str) -> Dict[str, Any]:
         agent = self.store.get_agent_by_name(agent_name)
         if agent is None:
@@ -309,7 +465,7 @@ class WorkerRuntime:
 
         package = self.store.get_current_package_for_agent(agent["id"])
         current_status = AgentStatus.BUSY.value if package else AgentStatus.IDLE.value
-        self.store.heartbeat(agent["id"], status=current_status)
+        self.store.heartbeat(agent["id"], status=current_status, lease_seconds=self.orchestrator.lease_seconds)
         if package is None:
             return {
                 "agent_name": agent_name,
@@ -329,26 +485,37 @@ class WorkerRuntime:
         runner = self._resolve_runner_config(agent)
 
         self.store.mark_assignment_active(agent["id"])
-        if runner["type"] == "shell":
-            completed = self._run_shell_runner(runner, paths, run_dir)
-        elif runner["type"] == "codex_exec":
-            completed = self._run_codex_exec(runner, paths)
+        try:
+            if runner["type"] == "shell":
+                completed = self._run_shell_runner(agent["id"], runner, paths, run_dir)
+            elif runner["type"] == "codex_exec":
+                completed = self._run_codex_exec(agent["id"], runner, paths)
+            else:
+                raise ValueError(f"Unsupported runner type: {runner['type']}")
+        except RunnerTimeoutError as exc:
+            paths["stdout"].write_text(exc.stdout, encoding="utf-8")
+            paths["stderr"].write_text(exc.stderr, encoding="utf-8")
+            completed = subprocess.CompletedProcess(
+                args=runner["type"],
+                returncode=exc.return_code,
+                stdout=exc.stdout,
+                stderr=exc.stderr,
+            )
+            payload = self._runner_timeout_payload(exc, run_dir, paths["stderr"])
         else:
-            raise ValueError(f"Unsupported runner type: {runner['type']}")
-
-        if completed.returncode == 0:
-            try:
-                payload = self._load_result_payload(paths["result"])
-            except Exception as exc:
-                payload = {
-                    "status": "blocked",
-                    "summary": "Worker produced an invalid result",
-                    "blocker_reason": f"{exc}. See {run_dir}",
-                    "artifacts": [{"path": str(paths["result"]), "description": "Invalid worker result"}],
-                    "notes": [],
-                }
-        else:
-            payload = self._runner_error_payload(completed.returncode, run_dir, paths["stderr"])
+            if completed.returncode == 0:
+                try:
+                    payload = self._load_result_payload(paths["result"])
+                except Exception as exc:
+                    payload = {
+                        "status": "blocked",
+                        "summary": "Worker produced an invalid result",
+                        "blocker_reason": f"{exc}. See {run_dir}",
+                        "artifacts": [{"path": str(paths["result"]), "description": "Invalid worker result"}],
+                        "notes": [],
+                    }
+            else:
+                payload = self._runner_error_payload(completed.returncode, run_dir, paths["stderr"])
 
         self._append_run_metadata(
             package_id=package["id"],
@@ -373,6 +540,25 @@ class WorkerRuntime:
             "outcome": outcome,
             "summary": payload["summary"],
             "run_dir": str(run_dir),
+        }
+
+    def run_cycle(
+        self,
+        goal_id: Optional[int] = None,
+        agent_names: Optional[Sequence[str]] = None,
+    ) -> Dict[str, Any]:
+        tick_result = self.orchestrator.tick()
+        self.heartbeat_agents(agent_names=agent_names)
+        worker_results: List[Dict[str, Any]] = []
+        for agent in self._select_agents(agent_names):
+            if agent["current_package_id"] is None:
+                continue
+            worker_results.append(self.run_agent_once(agent["name"]))
+        dashboard = self.orchestrator.dashboard(goal_id=goal_id)
+        return {
+            "tick": tick_result,
+            "worker_results": worker_results,
+            "dashboard": dashboard,
         }
 
     def run_autopilot(self, goal_id: Optional[int] = None, max_iterations: int = 10) -> Dict[str, Any]:
@@ -412,4 +598,57 @@ class WorkerRuntime:
             "goal_id": target_goal_id,
             "timeline": timeline,
             "dashboard": dashboard,
+        }
+
+    def run_service(
+        self,
+        poll_seconds: float = 5.0,
+        max_cycles: Optional[int] = None,
+        goal_id: Optional[int] = None,
+        agent_names: Optional[Sequence[str]] = None,
+        stop_when_idle: bool = False,
+    ) -> Dict[str, Any]:
+        cycles: List[Dict[str, Any]] = []
+        target_goal_id = goal_id
+        if target_goal_id is None:
+            initial_dashboard = self.orchestrator.dashboard(goal_id=None)
+            if initial_dashboard.get("goal"):
+                target_goal_id = initial_dashboard["goal"]["id"]
+        iteration = 0
+        while True:
+            iteration += 1
+            cycle = self.run_cycle(goal_id=target_goal_id, agent_names=agent_names)
+            dashboard = cycle["dashboard"]
+            goal = dashboard.get("goal")
+            cycles.append(
+                {
+                    "iteration": iteration,
+                    "tick": cycle["tick"],
+                    "worker_results": cycle["worker_results"],
+                    "goal_status": goal["status"] if goal else None,
+                }
+            )
+
+            has_activity = bool(
+                cycle["tick"]["assignments"]
+                or cycle["tick"]["resolution_packages"]
+                or cycle["tick"]["requeued_packages"]
+                or cycle["worker_results"]
+            )
+            goal_completed = bool(goal and goal["status"] == GoalStatus.COMPLETED.value)
+
+            if goal_completed:
+                break
+            if max_cycles is not None and iteration >= max_cycles:
+                break
+            if stop_when_idle and not has_activity:
+                break
+
+            time.sleep(poll_seconds)
+
+        final_dashboard = self.orchestrator.dashboard(goal_id=target_goal_id)
+        return {
+            "goal_id": target_goal_id,
+            "cycles": cycles,
+            "dashboard": final_dashboard,
         }
