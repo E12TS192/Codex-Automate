@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -10,6 +11,7 @@ from codex_automate.orchestrator import Orchestrator
 from codex_automate.runtime import WorkerRuntime
 from codex_automate.simulation import run_demo
 from codex_automate.state import StateStore
+from codex_automate.worker_host import inspect_worker_host, resolve_worker_host_config
 
 DB_HELP = (
     "SQLite path or database URL. Defaults to CODEX_AUTOMATE_DATABASE_URL, DATABASE_URL, "
@@ -130,6 +132,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit when one cycle completes without assignments or worker runs.",
     )
 
+    worker_check_parser = subparsers.add_parser("worker-check", help="Validate worker-host prerequisites.")
+    add_database_argument(worker_check_parser)
+    worker_check_parser.add_argument(
+        "--workspace",
+        default=None,
+        help="Workspace root expected by the worker host. Defaults to CODEX_AUTOMATE_WORKSPACE or cwd.",
+    )
+    worker_check_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress the JSON summary and only use the exit code.",
+    )
+
     autopilot_parser = subparsers.add_parser("autopilot", help="Run orchestrator + workers until stable or complete.")
     add_database_argument(autopilot_parser)
     autopilot_parser.add_argument("--goal-id", type=int, help="Goal to run. Defaults to the latest goal.")
@@ -235,6 +250,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     database_target = resolve_database_target(args.db)
+
+    if args.command == "worker-check":
+        try:
+            summary = inspect_worker_host(
+                resolve_worker_host_config(
+                    database_target=args.db,
+                    workspace_root=args.workspace,
+                )
+            )
+        except ValueError as exc:
+            print(f"Worker host check failed: {exc}", file=sys.stderr)
+            return 1
+        if not args.quiet:
+            print(json.dumps(summary, indent=2, ensure_ascii=True))
+        return 0
+
     store = StateStore(database_target)
     store.initialize()
     orchestrator = Orchestrator(store)

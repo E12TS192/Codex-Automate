@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    CODEX_AUTOMATE_WORKSPACE=/workspace \
+    CODEX_AUTOMATE_POLL_SECONDS=5 \
+    CODEX_AUTOMATE_REQUIRE_PERSISTENT_DB=1
+
+WORKDIR /app
+
+COPY pyproject.toml README.md app.py /app/
+COPY codex_automate /app/codex_automate
+COPY scripts /app/scripts
+
+RUN python -m pip install --upgrade pip \
+    && python -m pip install .
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD python -m codex_automate worker-check --workspace "${CODEX_AUTOMATE_WORKSPACE}" --quiet
+
+CMD ["/app/scripts/start-worker-host.sh"]

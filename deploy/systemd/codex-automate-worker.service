@@ -1,0 +1,19 @@
+[Unit]
+Description=Codex Automate worker host
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=codex
+Group=codex
+WorkingDirectory=/srv/codex-automate
+EnvironmentFile=/etc/codex-automate/worker.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/srv/codex-automate/scripts/start-worker-host.sh
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

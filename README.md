@@ -70,6 +70,7 @@ python3 -m codex_automate serve-workers --max-cycles 10 --stop-when-idle
 - Neon / Postgres: per `CODEX_AUTOMATE_DATABASE_URL`, `DATABASE_URL` oder `POSTGRES_URL`
 - Vercel: HTTP-Control-Plane zero-config ueber [app.py](/Users/alex/Projects/git/Codex Automate/app.py)
 - Dashboard: als Paket-Asset in [dashboard.html](/Users/alex/Projects/git/Codex Automate/codex_automate/assets/dashboard.html)
+- Worker-Host: Startskript in [start-worker-host.sh](/Users/alex/Projects/git/Codex Automate/scripts/start-worker-host.sh), Container-Image in [Dockerfile.worker](/Users/alex/Projects/git/Codex Automate/Dockerfile.worker), `systemd`-Unit in [codex-automate-worker.service](/Users/alex/Projects/git/Codex Automate/deploy/systemd/codex-automate-worker.service)
 
 Die konkrete Deploy-Reihenfolge steht in [docs/deployment.md](/Users/alex/Projects/git/Codex Automate/docs/deployment.md).
 Ohne gesetzte Datenbank-URL faellt Vercel bewusst nur auf eine temporaere SQLite-Datei unter `/tmp` zurueck.
@@ -84,6 +85,7 @@ Implementiert:
 - echter Worker-Runner fuer `codex exec` plus shell-basierter Test-Runner
 - poll-basierter Worker-Host ueber `serve-workers` fuer getrennten Dauerbetrieb gegen dieselbe Datenbank
 - Lease-Renewal per Heartbeat waehrend laufender Worker-Prozesse plus Timeout-Schutz fuer haengende Runs
+- Worker-Host-Preflight ueber `worker-check` plus fertige Deploy-Artefakte fuer `systemd` und Docker
 - FastAPI-Control-Plane und statisches Dashboard fuer Vercel
 - CLI fuer Bootstrap, Agent-Registry, Goal-Submission, Tick, Worker-Run, Autopilot und Dashboard
 - Demo-Simulation mit drei Agenten und einem absichtlich erzeugten Blocker

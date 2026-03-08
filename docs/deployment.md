@@ -68,3 +68,50 @@ Wichtige Runner-Parameter:
 - `--heartbeat-interval-seconds`: wie oft waehrend eines laufenden Runs die Lease aktiv verlaengert wird
 
 Fuer echten Dauerbetrieb sollte der Worker-Loop als Prozessmanager-Job oder Service laufen.
+
+## 5. Worker Preflight
+
+Vor dem Start kann der Host ueber denselben Pruefpfad validiert werden, den auch Docker und `systemd` benutzen:
+
+```bash
+python3 -m codex_automate worker-check --workspace /srv/codex-automate
+```
+
+Der Check prueft:
+
+- Workspace existiert
+- persistente Postgres-Verbindung ist konfiguriert, sofern `CODEX_AUTOMATE_REQUIRE_PERSISTENT_DB` nicht auf `0` steht
+- registrierte `codex_exec`-Agenten haben eine `codex`-CLI auf `PATH`
+
+## 6. systemd
+
+Vorbereitete Dateien:
+
+- Unit: [codex-automate-worker.service](/Users/alex/Projects/git/Codex Automate/deploy/systemd/codex-automate-worker.service)
+- Beispiel-Umgebung: [worker.env.example](/Users/alex/Projects/git/Codex Automate/deploy/worker.env.example)
+- Startskript: [start-worker-host.sh](/Users/alex/Projects/git/Codex Automate/scripts/start-worker-host.sh)
+
+Typischer Ablauf:
+
+```bash
+sudo install -d /etc/codex-automate
+sudo cp deploy/worker.env.example /etc/codex-automate/worker.env
+sudo cp deploy/systemd/codex-automate-worker.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now codex-automate-worker
+```
+
+## 7. Docker
+
+Fuer containerisierten Betrieb liegt ein generisches Worker-Image in [Dockerfile.worker](/Users/alex/Projects/git/Codex Automate/Dockerfile.worker).
+
+```bash
+docker build -f Dockerfile.worker -t codex-automate-worker .
+docker run --rm \
+  -e CODEX_AUTOMATE_DATABASE_URL=postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require \
+  -e CODEX_AUTOMATE_WORKSPACE=/workspace \
+  -v "$PWD:/workspace" \
+  codex-automate-worker
+```
+
+Wichtig: das Image installiert das Projekt selbst, aber nicht automatisch die `codex`-CLI. Fuer reine Shell-Runner reicht das aus. Fuer `codex_exec`-Agenten muss das Image oder der Host die `codex`-CLI zusaetzlich bereitstellen.
