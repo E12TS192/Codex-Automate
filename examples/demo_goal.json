@@ -1,0 +1,35 @@
+{
+  "title": "Deliver an autonomous Codex workflow",
+  "objective": "Coordinate planning, implementation and QA through an orchestrator agent.",
+  "acceptance_criteria": [
+    "Packages are assigned to matching agent capabilities.",
+    "Dependencies are respected.",
+    "Blockers lead to explicit unblock packages."
+  ],
+  "packages": [
+    {
+      "key": "plan",
+      "title": "Plan the operating model",
+      "description": "Define the multi-agent roles, status model and message contract.",
+      "capability": "planning",
+      "priority": 100
+    },
+    {
+      "key": "build",
+      "title": "Build the orchestrator core",
+      "description": "Implement state, scheduling and visibility.",
+      "capability": "backend",
+      "priority": 90,
+      "depends_on": ["plan"]
+    },
+    {
+      "key": "verify",
+      "title": "Verify the workflow",
+      "description": "Run end-to-end validation over the orchestrated flow.",
+      "capability": "qa",
+      "priority": 80,
+      "depends_on": ["build"]
+    }
+  ]
+}
+

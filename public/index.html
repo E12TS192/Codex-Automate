@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Codex Automate</title>
+    <style>
+      :root {
+        --bg: #f6f1e8;
+        --panel: rgba(255, 252, 246, 0.92);
+        --ink: #1f2a1f;
+        --muted: #5f6a5f;
+        --line: rgba(31, 42, 31, 0.14);
+        --accent: #165d4a;
+        --accent-soft: rgba(22, 93, 74, 0.1);
+        --warn: #9f4d1a;
+        --shadow: 0 24px 60px rgba(40, 44, 40, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(22, 93, 74, 0.16), transparent 34%),
+          radial-gradient(circle at top right, rgba(159, 77, 26, 0.12), transparent 28%),
+          linear-gradient(180deg, #fbf8f1 0%, var(--bg) 100%);
+        min-height: 100vh;
+      }
+
+      .shell {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+
+      .hero {
+        display: grid;
+        gap: 16px;
+        margin-bottom: 28px;
+      }
+
+      .eyebrow {
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(32px, 5vw, 56px);
+        line-height: 0.95;
+        max-width: 10ch;
+      }
+
+      .lede {
+        margin: 0;
+        max-width: 60ch;
+        color: var(--muted);
+        font-size: 17px;
+        line-height: 1.6;
+      }
+
+      .grid {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(14px);
+      }
+
+      .panel.pad {
+        padding: 20px;
+      }
+
+      .meta,
+      .composer {
+        grid-column: span 12;
+      }
+
+      .status,
+      .agents,
+      .packages,
+      .events {
+        grid-column: span 12;
+      }
+
+      @media (min-width: 960px) {
+        .status {
+          grid-column: span 4;
+        }
+
+        .agents {
+          grid-column: span 8;
+        }
+
+        .packages,
+        .events {
+          grid-column: span 6;
+        }
+      }
+
+      .meta-grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      .metric {
+        padding: 16px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.6);
+        border: 1px solid var(--line);
+      }
+
+      .metric strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 20px;
+      }
+
+      .panel h2 {
+        margin: 0 0 14px;
+        font-size: 18px;
+      }
+
+      .goal-title {
+        margin: 0 0 8px;
+        font-size: 24px;
+      }
+
+      .goal-meta {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+        font-size: 14px;
+      }
+
+      th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .badge.blocked,
+      .badge.failed {
+        background: rgba(159, 77, 26, 0.12);
+        color: var(--warn);
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+      }
+
+      button {
+        border: none;
+        border-radius: 999px;
+        padding: 12px 18px;
+        font: inherit;
+        font-weight: 600;
+        background: var(--accent);
+        color: white;
+        cursor: pointer;
+      }
+
+      button.secondary {
+        background: transparent;
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 240px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        padding: 16px;
+        resize: vertical;
+        font: 13px/1.55 "IBM Plex Mono", "SFMono-Regular", monospace;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .mono {
+        font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+        word-break: break-word;
+      }
+
+      .events-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .event {
+        padding: 12px;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.6);
+        border: 1px solid var(--line);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="eyebrow">Codex Automate</div>
+        <h1>Control plane for autonomous work.</h1>
+        <p class="lede">
+          This dashboard is meant for Vercel as the thin control plane: status visibility, goal intake and manual
+          orchestrator ticks. Long-running workers should keep running on separate compute.
+        </p>
+      </section>
+
+      <section class="grid">
+        <div class="panel pad meta">
+          <div class="meta-grid" id="meta-grid"></div>
+        </div>
+
+        <div class="panel pad status">
+          <h2>Current Goal</h2>
+          <div id="goal-card" class="muted">Loading...</div>
+          <div class="toolbar">
+            <button id="refresh-button" type="button">Refresh</button>
+            <button id="tick-button" class="secondary" type="button">Run Tick</button>
+          </div>
+        </div>
+
+        <div class="panel pad agents">
+          <h2>Agents</h2>
+          <div id="agents-table" class="muted">Loading...</div>
+        </div>
+
+        <div class="panel pad packages">
+          <h2>Packages</h2>
+          <div id="packages-table" class="muted">Loading...</div>
+        </div>
+
+        <div class="panel pad events">
+          <h2>Recent Events</h2>
+          <div id="events-list" class="events-list"></div>
+        </div>
+
+        <div class="panel pad composer">
+          <h2>Submit Goal</h2>
+          <p class="muted">
+            Paste a goal payload and post it to the control plane. The worker host can then pick it up from the shared
+            database.
+          </p>
+          <textarea id="goal-input"></textarea>
+          <div class="toolbar">
+            <button id="submit-goal" type="button">Submit Goal</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const sampleGoal = {
+        title: "Launch a remote control plane",
+        objective: "Track multi-agent delivery in a shared database and expose status via HTTP.",
+        acceptance_criteria: [
+          "A goal is visible in the dashboard.",
+          "Packages can be assigned by the orchestrator.",
+          "Status survives outside a local SQLite file."
+        ],
+        packages: [
+          {
+            key: "plan",
+            title: "Plan deployment topology",
+            description: "Describe which parts run on Vercel, Neon and worker compute.",
+            capability: "planning",
+            priority: 100
+          },
+          {
+            key: "api",
+            title: "Expose dashboard API",
+            description: "Implement read-only status endpoints and a small web dashboard.",
+            capability: "backend",
+            priority: 90,
+            depends_on: ["plan"]
+          }
+        ]
+      };
+
+      const goalInput = document.getElementById("goal-input");
+      goalInput.value = JSON.stringify(sampleGoal, null, 2);
+
+      async function fetchJson(url, options = {}) {
+        const response = await fetch(url, {
+          headers: { "Content-Type": "application/json" },
+          ...options
+        });
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || `Request failed with ${response.status}`);
+        }
+        return response.json();
+      }
+
+      function badge(status) {
+        const klass = String(status || "").toLowerCase();
+        return `<span class="badge ${klass}">${status || "unknown"}</span>`;
+      }
+
+      function renderMeta(payload) {
+        const goal = payload.goal;
+        const packages = payload.packages || [];
+        const agents = payload.agents || [];
+        const backend = payload.meta?.backend || "unknown";
+        const database = payload.meta?.database || "unknown";
+        document.getElementById("meta-grid").innerHTML = [
+          ["Backend", backend],
+          ["Database", `<span class="mono">${database}</span>`],
+          ["Agents", String(agents.length)],
+          ["Packages", String(packages.length)],
+          ["Goal status", goal ? badge(goal.status) : "<span class='muted'>none</span>"]
+        ]
+          .map(([label, value]) => `<div class="metric"><span class="muted">${label}</span><strong>${value}</strong></div>`)
+          .join("");
+      }
+
+      function renderGoal(goal) {
+        if (!goal) {
+          document.getElementById("goal-card").innerHTML = "<p class='muted'>No goal found.</p>";
+          return;
+        }
+        document.getElementById("goal-card").innerHTML = `
+          <p class="goal-title">${goal.title}</p>
+          <p class="goal-meta">${badge(goal.status)}</p>
+          <p class="goal-meta">${goal.objective}</p>
+        `;
+      }
+
+      function renderAgents(agents) {
+        if (!agents.length) {
+          document.getElementById("agents-table").innerHTML = "<p class='muted'>No agents registered.</p>";
+          return;
+        }
+        document.getElementById("agents-table").innerHTML = `
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Status</th><th>Capabilities</th><th>Current</th></tr>
+            </thead>
+            <tbody>
+              ${agents
+                .map(
+                  (agent) => `
+                    <tr>
+                      <td>${agent.name}</td>
+                      <td>${badge(agent.status)}</td>
+                      <td>${agent.capabilities.join(", ") || "-"}</td>
+                      <td>${agent.current_package_id || "-"}</td>
+                    </tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `;
+      }
+
+      function renderPackages(packages) {
+        if (!packages.length) {
+          document.getElementById("packages-table").innerHTML = "<p class='muted'>No packages available.</p>";
+          return;
+        }
+        document.getElementById("packages-table").innerHTML = `
+          <table>
+            <thead>
+              <tr><th>Title</th><th>Status</th><th>Capability</th><th>Priority</th><th>Blocker</th></tr>
+            </thead>
+            <tbody>
+              ${packages
+                .map(
+                  (pkg) => `
+                    <tr>
+                      <td>${pkg.title}</td>
+                      <td>${badge(pkg.status)}</td>
+                      <td>${pkg.capability}</td>
+                      <td>${pkg.priority}</td>
+                      <td>${pkg.blocker_reason || "-"}</td>
+                    </tr>`
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `;
+      }
+
+      function renderEvents(events) {
+        if (!events.length) {
+          document.getElementById("events-list").innerHTML = "<p class='muted'>No events yet.</p>";
+          return;
+        }
+        document.getElementById("events-list").innerHTML = events
+          .map(
+            (event) => `
+              <article class="event">
+                <strong>${event.event_type}</strong>
+                <div class="muted">${event.created_at}</div>
+                <div class="mono">${JSON.stringify(event.payload)}</div>
+              </article>`
+          )
+          .join("");
+      }
+
+      async function loadDashboard() {
+        const payload = await fetchJson("/api/dashboard");
+        renderMeta(payload);
+        renderGoal(payload.goal);
+        renderAgents(payload.agents || []);
+        renderPackages(payload.packages || []);
+        renderEvents(payload.events || []);
+      }
+
+      async function runTick() {
+        await fetchJson("/api/tick", { method: "POST" });
+        await loadDashboard();
+      }
+
+      async function submitGoal() {
+        const payload = JSON.parse(goalInput.value);
+        await fetchJson("/api/goals", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        await loadDashboard();
+      }
+
+      document.getElementById("refresh-button").addEventListener("click", loadDashboard);
+      document.getElementById("tick-button").addEventListener("click", runTick);
+      document.getElementById("submit-goal").addEventListener("click", submitGoal);
+
+      loadDashboard().catch((error) => {
+        document.getElementById("goal-card").innerHTML = `<p class="muted">${error.message}</p>`;
+      });
+    </script>
+  </body>
+</html>
