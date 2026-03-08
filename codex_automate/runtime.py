@@ -52,6 +52,56 @@ class WorkerRuntime:
             Path(__file__).resolve().parent / "schemas" / "worker_result.schema.json"
         )
 
+    def _package_snapshot(self, package: Optional[Dict[str, Any]], *, include_siblings: bool = False) -> Optional[Dict[str, Any]]:
+        if package is None:
+            return None
+        metadata = dict(package.get("metadata", {}))
+        latest_run = dict(metadata.get("latest_run") or {})
+        latest_stage_output = dict(latest_run.get("stage_output") or metadata.get("stage_output") or {})
+        latest_notes = [str(item) for item in latest_run.get("notes", [])[:8]]
+        snapshot = {
+            "id": package["id"],
+            "goal_id": package["goal_id"],
+            "parent_package_id": package.get("parent_package_id"),
+            "title": package["title"],
+            "description": package["description"],
+            "capability": package["capability"],
+            "priority": package["priority"],
+            "kind": package["kind"],
+            "status": package["status"],
+            "acceptance_criteria": list(package.get("acceptance_criteria", [])),
+            "dependency_ids": list(package.get("dependency_ids", [])),
+            "blocker_reason": package.get("blocker_reason"),
+            "metadata": {
+                key: metadata[key]
+                for key in (
+                    "stage",
+                    "allow_new_packages",
+                    "generated_by_package_id",
+                    "blocked_package_id",
+                    "parent_blocker_version",
+                    "original_capability",
+                )
+                if key in metadata
+            },
+            "latest_run": {
+                "status": latest_run.get("status"),
+                "summary": latest_run.get("summary"),
+                "notes": latest_notes,
+                "stage_output": latest_stage_output,
+            }
+            if latest_run or latest_stage_output
+            else {},
+        }
+        if include_siblings:
+            return {
+                "id": snapshot["id"],
+                "title": snapshot["title"],
+                "status": snapshot["status"],
+                "capability": snapshot["capability"],
+            }
+        return snapshot
+
     def _resolve_runner_config(self, agent: Dict[str, Any]) -> Dict[str, Any]:
         metadata = dict(agent.get("metadata", {}))
         runner = dict(metadata.get("runner", {}))
@@ -114,27 +164,22 @@ class WorkerRuntime:
 
     def _build_context(self, agent: Dict[str, Any], goal: Dict[str, Any], package: Dict[str, Any], run_dir: Path) -> Dict[str, Any]:
         dependencies = [
-            self.store.get_package(dependency_id)
+            self._package_snapshot(self.store.get_package(dependency_id))
             for dependency_id in package["dependency_ids"]
             if self.store.get_package(dependency_id) is not None
         ]
         blocked_package = None
         blocked_package_id = dict(package.get("metadata", {})).get("blocked_package_id")
         if blocked_package_id is not None:
-            blocked_package = self.store.get_package(int(blocked_package_id))
+            blocked_package = self._package_snapshot(self.store.get_package(int(blocked_package_id)))
         sibling_packages = [
-            {
-                "id": item["id"],
-                "title": item["title"],
-                "status": item["status"],
-                "capability": item["capability"],
-            }
+            self._package_snapshot(item, include_siblings=True)
             for item in self.store.list_packages(goal_id=goal["id"])
             if item["id"] != package["id"]
         ]
         return {
             "goal": goal,
-            "package": package,
+            "package": self._package_snapshot(package),
             "dependencies": dependencies,
             "blocked_package": blocked_package,
             "sibling_packages": sibling_packages,
@@ -272,6 +317,17 @@ class WorkerRuntime:
                 - Use depends_on keys when later packages must wait for earlier generated packages.
                 - Prefer synthesis over more discovery. Build the package graph from the information already available.
                 - Prefer a small, executable package graph over a large speculative backlog.
+                """
+            ).strip()
+        if context["package"].get("kind") in {"implementation", "implementation-prep", "validation", "operations"}:
+            return dedent(
+                """\
+                - Treat this as a focused implementation blueprint package, not as open-ended discovery.
+                - Work primarily from the dependency summaries, stage outputs and acceptance criteria already present in the context.
+                - Do not scan broad run history or search the whole workspace unless a single targeted lookup is strictly necessary.
+                - Prefer a compact deliverable shape: scope, key design choices, flow/contract, failure handling, tests and handoff.
+                - If the package is still too large to answer well, return status='blocked' with a precise split recommendation rather than timing out.
+                - Keep the result concise and decision-ready.
                 """
             ).strip()
         return "No stage-specific guidance."

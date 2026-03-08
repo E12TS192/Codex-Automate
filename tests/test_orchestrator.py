@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import threading
 import tempfile
 import time
@@ -134,6 +133,77 @@ class OrchestratorTests(unittest.TestCase):
         tick_three = self.orchestrator.tick()
         self.assertEqual(tick_three["assignments"][0]["agent_name"], "delivery")
         self.assertEqual(tick_three["assignments"][0]["package_title"], "Documentation package")
+
+    def test_worker_context_uses_compact_dependency_snapshots(self) -> None:
+        agent_id = self.store.register_agent(
+            "shell-planner",
+            ["planning"],
+            metadata={
+                "runner": {
+                    "type": "shell",
+                    "command": "true",
+                    "cwd": str(self.workspace_root),
+                }
+            },
+        )
+        goal_id = self.orchestrator.submit_goal_from_dict(
+            {
+                "title": "Compact context",
+                "packages": [
+                    {
+                        "key": "dep",
+                        "title": "Dependency package",
+                        "description": "Completed dependency with large metadata",
+                        "capability": "planning",
+                        "priority": 100,
+                    },
+                    {
+                        "key": "target",
+                        "title": "Target package",
+                        "description": "Should only receive compact dependency context",
+                        "capability": "planning",
+                        "priority": 90,
+                        "depends_on": ["dep"],
+                        "kind": "implementation",
+                    },
+                ],
+            }
+        )
+
+        packages = self.store.list_packages(goal_id=goal_id)
+        dependency_package = packages[0]
+        target_package = packages[1]
+        noisy_metadata = dict(dependency_package["metadata"])
+        noisy_metadata["runs"] = [
+            {
+                "summary": "old run",
+                "notes": ["x" * 2000],
+                "stage_output": {"key_points": ["y" * 2000]},
+            }
+        ]
+        noisy_metadata["latest_run"] = {
+            "status": "completed",
+            "summary": "dependency summary",
+            "notes": ["keep this", "and this"],
+            "stage_output": {"verdict": "go", "key_points": ["short point"]},
+        }
+        self.store.update_package_metadata(dependency_package["id"], noisy_metadata)
+
+        self.store.assign_package(dependency_package["id"], agent_id)
+        self.store.complete_current_package(agent_id, summary="done")
+
+        agent = self.store.get_agent_by_name("shell-planner")
+        goal = self.store.get_goal(goal_id)
+        refreshed_target = self.store.get_package(target_package["id"])
+        context = self.runtime._build_context(agent, goal, refreshed_target, self.workspace_root / "artifacts")
+        dependency_snapshot = context["dependencies"][0]
+
+        self.assertNotIn("runs", dependency_snapshot["metadata"])
+        self.assertEqual(dependency_snapshot["latest_run"]["summary"], "dependency summary")
+        self.assertEqual(dependency_snapshot["latest_run"]["notes"], ["keep this", "and this"])
+        prompt = self.runtime._build_prompt(context)
+        self.assertNotIn('"runs"', prompt)
+        self.assertIn("Treat this as a focused implementation blueprint package", prompt)
 
     def test_blockers_create_resolution_and_requeue_parent(self) -> None:
         self.store.register_agent("lead", ["orchestrator", "planning"])
