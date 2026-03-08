@@ -123,6 +123,44 @@ class OrchestratorTests(unittest.TestCase):
         dashboard = self.orchestrator.dashboard(goal_id)
         self.assertEqual(dashboard["goal"]["status"], "completed")
 
+    def test_blocked_resolution_package_does_not_spawn_recursive_resolution(self) -> None:
+        lead_id = self.store.register_agent("lead", ["orchestrator", "planning"])
+        self.store.register_agent("qa", ["qa"])
+
+        goal_id = self.orchestrator.submit_goal_from_dict(
+            {
+                "title": "Resolution recursion guard",
+                "packages": [
+                    {
+                        "key": "qa",
+                        "title": "QA run",
+                        "description": "Exercise blocker resolution recursion guard",
+                        "capability": "qa",
+                        "priority": 100,
+                        "metadata": {
+                            "block_once": True,
+                            "block_reason": "Need rollback decision"
+                        }
+                    }
+                ],
+            }
+        )
+
+        self.orchestrator.tick()
+        SimulatedWorker(self.store, "qa").step()
+
+        first_resolution_tick = self.orchestrator.tick()
+        self.assertEqual(len(first_resolution_tick["resolution_packages"]), 1)
+
+        self.store.block_current_package(lead_id, "Resolution package timed out")
+        second_resolution_tick = self.orchestrator.tick()
+        self.assertEqual(second_resolution_tick["resolution_packages"], [])
+
+        packages = self.store.list_packages(goal_id=goal_id)
+        resolution_packages = [package for package in packages if package["kind"] == "unblock"]
+        self.assertEqual(len(resolution_packages), 1)
+        self.assertEqual(resolution_packages[0]["status"], "blocked")
+
     def test_shell_worker_completes_assigned_package(self) -> None:
         command = """python3 - <<'PY'
 import json

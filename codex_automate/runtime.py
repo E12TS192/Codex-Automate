@@ -118,6 +118,10 @@ class WorkerRuntime:
             for dependency_id in package["dependency_ids"]
             if self.store.get_package(dependency_id) is not None
         ]
+        blocked_package = None
+        blocked_package_id = dict(package.get("metadata", {})).get("blocked_package_id")
+        if blocked_package_id is not None:
+            blocked_package = self.store.get_package(int(blocked_package_id))
         sibling_packages = [
             {
                 "id": item["id"],
@@ -132,6 +136,7 @@ class WorkerRuntime:
             "goal": goal,
             "package": package,
             "dependencies": dependencies,
+            "blocked_package": blocked_package,
             "sibling_packages": sibling_packages,
             "agent": {
                 "name": agent["name"],
@@ -166,6 +171,9 @@ class WorkerRuntime:
             Dependency packages:
             {json.dumps(context['dependencies'], indent=2, ensure_ascii=True)}
 
+            Blocked package context:
+            {json.dumps(context['blocked_package'], indent=2, ensure_ascii=True)}
+
             Other packages in the same goal:
             {json.dumps(context['sibling_packages'], indent=2, ensure_ascii=True)}
 
@@ -196,11 +204,23 @@ class WorkerRuntime:
     def _stage_guidance(self, context: Dict[str, Any]) -> str:
         metadata = dict(context["package"].get("metadata", {}))
         stage = metadata.get("stage")
+        if context["package"].get("kind") == "unblock":
+            return dedent(
+                """\
+                - This is a blocker-resolution package. Diagnose the blocker using the blocked package context and its existing run artifacts first.
+                - Do not do broad new discovery or web research unless the blocker explicitly cannot be resolved from the existing context.
+                - The goal is an operational next step: either a narrow retry plan, a concrete fix condition, or a concise no-go reason.
+                - Keep the summary short and operational.
+                - Keep notes compact and action-oriented.
+                - Do not create follow-on packages in this stage.
+                """
+            ).strip()
         if stage == "feasibility":
             return dedent(
                 """\
                 - Decide whether the project is viable now, viable with constraints, or blocked by missing input.
                 - In stage_output, set verdict plus arrays for key_points, risks and open_questions.
+                - Keep research bounded. Prefer a small set of focused checks and then synthesize.
                 - In notes, cover only the most decision-relevant rationale, not a long report.
                 - The summary should clearly state the overall feasibility verdict.
                 - Do not create follow-on packages in this stage.
@@ -211,6 +231,7 @@ class WorkerRuntime:
                 """\
                 - Produce a practical implementation direction, not a generic essay.
                 - In stage_output, fill components, decisions, delivery_sequence, validation_strategy and handoff.
+                - Reuse information already collected in earlier stages and avoid wide new research unless essential.
                 - In notes, keep only compact rationale for the most important tradeoffs.
                 - The summary should state the recommended architecture in one sentence.
                 - Do not create follow-on packages in this stage.
@@ -223,6 +244,7 @@ class WorkerRuntime:
                 - In stage_output, fill generated_package_titles, generated_package_count and handoff.
                 - Each new package should have a clear title, direct description, capability, and realistic priority.
                 - Use depends_on keys when later packages must wait for earlier generated packages.
+                - Prefer synthesis over more discovery. Build the package graph from the information already available.
                 - Prefer a small, executable package graph over a large speculative backlog.
                 """
             ).strip()

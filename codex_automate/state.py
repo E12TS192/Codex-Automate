@@ -853,16 +853,16 @@ class StateStore:
         blocked_packages = self.list_packages(statuses=[PackageStatus.BLOCKED.value])
         result: List[Dict[str, Any]] = []
         for blocked in blocked_packages:
+            if blocked["kind"] == "unblock":
+                continue
+            blocker_version = int(blocked["metadata"].get("blocker_version", 0))
+            if blocker_version <= 0:
+                continue
             children = self.list_child_packages(
                 blocked["id"],
-                statuses=[
-                    PackageStatus.PENDING.value,
-                    PackageStatus.ASSIGNED.value,
-                    PackageStatus.ACTIVE.value,
-                ],
                 kind="unblock",
             )
-            if not children:
+            if not any(child["metadata"].get("parent_blocker_version") == blocker_version for child in children):
                 result.append(blocked)
         return result
 
