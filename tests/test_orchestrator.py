@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from codex_automate.orchestrator import Orchestrator
-from codex_automate.runtime import WorkerRuntime
+from codex_automate.runtime import RunnerTimeoutError, WorkerRuntime
 from codex_automate.simulation import SimulatedWorker
 from codex_automate.state import StateStore
 
@@ -450,6 +450,18 @@ PY"""
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(completed.stdout, "worker stdin smoke\n")
         self.assertEqual(completed.stderr, "")
+
+    def test_monitored_process_timeout_with_stdin_raises_runner_timeout(self) -> None:
+        with self.assertRaises(RunnerTimeoutError):
+            self.runtime._run_monitored_process(
+                command=["python3", "-c", "import time; time.sleep(1)"],
+                cwd=self.workspace_root,
+                env={},
+                input_text="worker stdin smoke\n",
+                shell=False,
+                agent_id=self.store.register_agent("stdin-timeout", ["planning"]),
+                runner={"timeout_seconds": 0.2, "heartbeat_interval_seconds": 0.1},
+            )
 
     def test_discovery_pipeline_can_generate_follow_on_packages(self) -> None:
         planning_command = """python3 - <<'PY'

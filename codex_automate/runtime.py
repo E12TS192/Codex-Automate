@@ -307,6 +307,8 @@ class WorkerRuntime:
         if input_text is not None and process.stdin is not None:
             process.stdin.write(input_text)
             process.stdin.close()
+            # Prevent subprocess.communicate() from flushing a closed stdin pipe on timeout paths.
+            process.stdin = None
 
         started_at = time.monotonic()
         while True:
