@@ -87,6 +87,54 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(packages[3]["dependency_ids"], [packages[2]["id"]])
         self.assertEqual(packages[4]["dependency_ids"], [packages[3]["id"]])
 
+    def test_delivery_capability_aliases_unlock_generated_work(self) -> None:
+        planner_id = self.store.register_agent("planner", ["planning"])
+        delivery_id = self.store.register_agent("delivery", ["backend", "api", "docs"])
+
+        goal_id = self.orchestrator.submit_goal_from_dict(
+            {
+                "title": "Generated delivery work",
+                "packages": [
+                    {
+                        "key": "plan",
+                        "title": "Planning",
+                        "description": "Seed completed planning output",
+                        "capability": "planning",
+                        "priority": 100,
+                    },
+                    {
+                        "key": "build",
+                        "title": "Implementation package",
+                        "description": "Needs a delivery agent",
+                        "capability": "implementation",
+                        "priority": 90,
+                        "depends_on": ["plan"],
+                    },
+                    {
+                        "key": "docs",
+                        "title": "Documentation package",
+                        "description": "Needs docs capability alias",
+                        "capability": "documentation",
+                        "priority": 80,
+                        "depends_on": ["build"],
+                    },
+                ],
+            }
+        )
+
+        tick_one = self.orchestrator.tick()
+        self.assertEqual(tick_one["assignments"][0]["agent_name"], "planner")
+        self.store.complete_current_package(planner_id, summary="planned")
+
+        tick_two = self.orchestrator.tick()
+        self.assertEqual(tick_two["assignments"][0]["agent_name"], "delivery")
+        self.assertEqual(tick_two["assignments"][0]["package_title"], "Implementation package")
+        self.store.complete_current_package(delivery_id, summary="implemented")
+
+        tick_three = self.orchestrator.tick()
+        self.assertEqual(tick_three["assignments"][0]["agent_name"], "delivery")
+        self.assertEqual(tick_three["assignments"][0]["package_title"], "Documentation package")
+
     def test_blockers_create_resolution_and_requeue_parent(self) -> None:
         self.store.register_agent("lead", ["orchestrator", "planning"])
         self.store.register_agent("qa", ["qa"])

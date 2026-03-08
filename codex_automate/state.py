@@ -487,8 +487,22 @@ class StateStore:
         self, capabilities: Sequence[str], required_capability: str
     ) -> bool:
         capability_set = set(capabilities)
+        aliases = {
+            "implementation": {
+                "implementation",
+                "backend",
+                "frontend",
+                "api",
+                "integration",
+                "deployment",
+                "security",
+                "automation",
+            },
+            "documentation": {"documentation", "docs"},
+        }
+        required_set = aliases.get(required_capability, {required_capability})
         return (
-            required_capability in capability_set
+            bool(capability_set & required_set)
             or "*" in capability_set
             or "generalist" in capability_set
         )
