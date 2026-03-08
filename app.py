@@ -6,7 +6,7 @@ from functools import lru_cache
 from importlib.resources import files
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
@@ -108,13 +108,7 @@ def health() -> Dict[str, Any]:
 
 @app.get("/api/dashboard", dependencies=[Depends(require_operator_access)])
 def dashboard(goal_id: Optional[int] = None) -> Dict[str, Any]:
-    store = get_store()
-    payload = get_orchestrator().dashboard(goal_id=goal_id)
-    payload["meta"] = {
-        "backend": store.backend,
-        "database": redact_database_target(store.database_target),
-    }
-    return payload
+    return get_orchestrator().dashboard(goal_id=goal_id)
 
 
 @app.post("/api/goals", dependencies=[Depends(require_operator_access)])

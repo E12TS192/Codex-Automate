@@ -146,6 +146,9 @@ class WorkerRuntime:
         runner = context["agent"]["runner"]
         extra_instructions = runner.get("instructions") or ["Stay tightly within the assigned package."]
         instruction_block = "\n".join(f"- {item}" for item in extra_instructions)
+        package_metadata = context["package"].get("metadata", {})
+        allow_new_packages = bool(package_metadata.get("allow_new_packages"))
+        stage_guidance = self._stage_guidance(context)
         return dedent(
             f"""\
             You are worker agent '{context['agent']['name']}'.
@@ -172,13 +175,52 @@ class WorkerRuntime:
             Rules:
             - Finish only this package.
             - If a real blocker prevents completion, stop and report status='blocked'.
-            - If completed, summarize the concrete outcome.
+            - If completed, summarize the concrete outcome in summary using one concise executive sentence.
             - Always include blocker_reason. Use an empty string when the package is completed.
+            - Put supporting detail into notes as short, decision-ready bullet sentences.
             - Use new_packages only when this package should spawn concrete follow-on work.
+            - This package may create follow-on packages: {allow_new_packages}.
+            - When allow_new_packages is false, new_packages must stay empty.
+            - When allow_new_packages is true and more implementation work is needed, emit concrete new_packages instead of vague notes.
             - Save any supporting artifacts under the artifact directory when useful.
             - Your final response must satisfy the provided JSON schema.
+
+            Stage-specific guidance:
+            {stage_guidance}
             """
         )
+
+    def _stage_guidance(self, context: Dict[str, Any]) -> str:
+        metadata = dict(context["package"].get("metadata", {}))
+        stage = metadata.get("stage")
+        if stage == "feasibility":
+            return dedent(
+                """\
+                - Decide whether the project is viable now, viable with constraints, or blocked by missing input.
+                - In notes, cover: scope risks, dependency risks, delivery risks, and missing information.
+                - The summary should clearly state the overall feasibility verdict.
+                - Do not create follow-on packages in this stage.
+                """
+            ).strip()
+        if stage == "architecture":
+            return dedent(
+                """\
+                - Produce a practical implementation direction, not a generic essay.
+                - In notes, cover: key components, interfaces, sequencing, technical risks, and validation strategy.
+                - The summary should state the recommended architecture in one sentence.
+                - Do not create follow-on packages in this stage.
+                """
+            ).strip()
+        if stage == "breakdown":
+            return dedent(
+                """\
+                - Convert the architecture into concrete work packages that other agents can execute immediately.
+                - Each new package should have a clear title, direct description, capability, and realistic priority.
+                - Use depends_on keys when later packages must wait for earlier generated packages.
+                - Prefer a small, executable package graph over a large speculative backlog.
+                """
+            ).strip()
+        return "No stage-specific guidance."
 
     def _write_run_inputs(self, run_dir: Path, context: Dict[str, Any]) -> Dict[str, Path]:
         prompt_path = run_dir / "prompt.txt"

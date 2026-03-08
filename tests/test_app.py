@@ -39,7 +39,7 @@ class ApiTests(unittest.TestCase):
 
         dashboard = self.client.get("/api/dashboard")
         self.assertEqual(dashboard.status_code, 200)
-        self.assertIn("meta", dashboard.json())
+        self.assertIn("goal", dashboard.json())
 
     def test_goal_submission_via_api(self) -> None:
         response = self.client.post(
