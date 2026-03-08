@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["status", "summary", "blocker_reason", "artifacts", "notes"],
+  "required": ["status", "summary", "blocker_reason", "artifacts", "notes", "new_packages", "stage_output"],
   "properties": {
     "status": {
       "type": "string",
@@ -38,13 +38,23 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title", "description", "capability"],
+        "required": [
+          "title",
+          "description",
+          "capability",
+          "priority",
+          "kind",
+          "key",
+          "depends_on",
+          "acceptance_criteria",
+          "metadata"
+        ],
         "properties": {
           "title": { "type": "string", "minLength": 1 },
           "description": { "type": "string", "minLength": 1 },
           "capability": { "type": "string", "minLength": 1 },
           "priority": { "type": "integer" },
-          "kind": { "type": "string" },
+          "kind": { "type": "string", "minLength": 1 },
           "key": { "type": "string" },
           "depends_on": {
             "type": "array",
@@ -55,7 +65,9 @@
             "items": { "type": "string" }
           },
           "metadata": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
           }
         }
       }
@@ -63,10 +75,23 @@
     "stage_output": {
       "type": "object",
       "additionalProperties": false,
+      "required": [
+        "verdict",
+        "key_points",
+        "risks",
+        "open_questions",
+        "components",
+        "decisions",
+        "delivery_sequence",
+        "validation_strategy",
+        "handoff",
+        "generated_package_titles",
+        "generated_package_count"
+      ],
       "properties": {
         "verdict": {
-          "type": "string",
-          "enum": ["go", "conditional", "blocked"]
+          "type": ["string", "null"],
+          "enum": ["go", "conditional", "blocked", null]
         },
         "key_points": {
           "type": "array",
@@ -97,7 +122,7 @@
           "items": { "type": "string" }
         },
         "handoff": {
-          "type": "string"
+          "type": ["string", "null"]
         },
         "generated_package_titles": {
           "type": "array",

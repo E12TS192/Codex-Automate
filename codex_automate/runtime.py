@@ -182,6 +182,9 @@ class WorkerRuntime:
             - This package may create follow-on packages: {allow_new_packages}.
             - When allow_new_packages is false, new_packages must stay empty.
             - When allow_new_packages is true and more implementation work is needed, emit concrete new_packages instead of vague notes.
+            - Always emit all top-level schema fields, including new_packages and stage_output.
+            - If you emit new_packages, every package entry must include all schema keys. Use empty arrays/objects and a non-empty kind string when nothing special is needed.
+            - In stage_output, keep irrelevant fields empty or null, but still include them.
             - Save any supporting artifacts under the artifact directory when useful.
             - Your final response must satisfy the provided JSON schema.
 
