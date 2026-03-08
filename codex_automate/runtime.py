@@ -10,7 +10,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Any, Dict, List, Optional, Sequence
 
-from codex_automate.models import AgentStatus, GoalStatus
+from codex_automate.models import AgentStatus, GoalStatus, WorkPackageInput
 from codex_automate.orchestrator import Orchestrator
 from codex_automate.state import StateStore
 
@@ -174,6 +174,7 @@ class WorkerRuntime:
             - If a real blocker prevents completion, stop and report status='blocked'.
             - If completed, summarize the concrete outcome.
             - Always include blocker_reason. Use an empty string when the package is completed.
+            - Use new_packages only when this package should spawn concrete follow-on work.
             - Save any supporting artifacts under the artifact directory when useful.
             - Your final response must satisfy the provided JSON schema.
             """
@@ -404,6 +405,7 @@ class WorkerRuntime:
             raise ValueError("Blocked worker results must contain blocker_reason.")
         payload.setdefault("artifacts", [])
         payload.setdefault("notes", [])
+        payload.setdefault("new_packages", [])
         return payload
 
     def _append_run_metadata(
@@ -426,6 +428,7 @@ class WorkerRuntime:
             "summary": payload.get("summary"),
             "artifacts": payload.get("artifacts", []),
             "notes": payload.get("notes", []),
+            "new_packages": payload.get("new_packages", []),
             "return_code": return_code,
         }
         runs.append(run_record)
@@ -531,7 +534,28 @@ class WorkerRuntime:
             return_code=completed.returncode,
         )
 
+        created_package_ids: List[int] = []
         if payload["status"] == "completed":
+            if payload.get("new_packages"):
+                created_package_ids = self.orchestrator.add_packages(
+                    goal_id=goal["id"],
+                    packages=[
+                        WorkPackageInput(
+                            title=item["title"],
+                            description=item["description"],
+                            capability=item["capability"],
+                            priority=int(item.get("priority", 50)),
+                            kind=item.get("kind", "delivery"),
+                            key=item.get("key"),
+                            depends_on=list(item.get("depends_on", [])),
+                            acceptance_criteria=list(item.get("acceptance_criteria", [])),
+                            metadata=dict(item.get("metadata", {})),
+                        )
+                        for item in payload["new_packages"]
+                    ],
+                    parent_package_id=package["id"],
+                    default_dependency_ids=[package["id"]],
+                )
             self.store.complete_current_package(agent["id"], payload["summary"])
             outcome = "completed"
         else:
@@ -545,6 +569,7 @@ class WorkerRuntime:
             "package_title": package["title"],
             "outcome": outcome,
             "summary": payload["summary"],
+            "created_package_ids": created_package_ids,
             "run_dir": str(run_dir),
         }
 

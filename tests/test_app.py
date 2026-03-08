@@ -65,6 +65,23 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(payload["goal"]["id"], goal_id)
         self.assertEqual(len(payload["packages"]), 1)
 
+    def test_goal_submission_without_packages_creates_discovery_pipeline(self) -> None:
+        response = self.client.post(
+            "/api/goals",
+            json={
+                "title": "Free-form API goal",
+                "objective": "Turn a user request into staged planning work.",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        goal_id = response.json()["goal_id"]
+
+        dashboard = self.client.get("/api/dashboard", params={"goal_id": goal_id})
+        self.assertEqual(dashboard.status_code, 200)
+        payload = dashboard.json()
+        self.assertEqual(payload["goal"]["id"], goal_id)
+        self.assertEqual(len(payload["packages"]), 3)
+
     def test_dashboard_requires_auth_when_enabled(self) -> None:
         os.environ["CODEX_AUTOMATE_REQUIRE_AUTH"] = "1"
         os.environ["CODEX_AUTOMATE_AUTH_USERNAME"] = "alex"

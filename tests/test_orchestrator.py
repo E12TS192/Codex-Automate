@@ -69,6 +69,19 @@ class OrchestratorTests(unittest.TestCase):
         dashboard = self.orchestrator.dashboard(goal_id)
         self.assertEqual(dashboard["goal"]["status"], "completed")
 
+    def test_goal_without_packages_creates_default_discovery_pipeline(self) -> None:
+        goal_id = self.orchestrator.submit_goal_from_dict(
+            {
+                "title": "Natural language goal",
+                "objective": "Build a small internal tool from a free-form request.",
+            }
+        )
+
+        packages = self.store.list_packages(goal_id=goal_id)
+        self.assertEqual([package["metadata"]["stage"] for package in packages], ["feasibility", "architecture", "breakdown"])
+        self.assertEqual(packages[1]["dependency_ids"], [packages[0]["id"]])
+        self.assertEqual(packages[2]["dependency_ids"], [packages[1]["id"]])
+
     def test_blockers_create_resolution_and_requeue_parent(self) -> None:
         self.store.register_agent("lead", ["orchestrator", "planning"])
         self.store.register_agent("qa", ["qa"])
@@ -437,6 +450,118 @@ PY"""
         self.assertEqual(completed.returncode, 0)
         self.assertEqual(completed.stdout, "worker stdin smoke\n")
         self.assertEqual(completed.stderr, "")
+
+    def test_discovery_pipeline_can_generate_follow_on_packages(self) -> None:
+        planning_command = """python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+context = json.loads(Path(os.environ["CODEX_AUTOMATE_CONTEXT_FILE"]).read_text(encoding="utf-8"))
+stage = context["package"]["metadata"].get("stage")
+result = {
+    "status": "completed",
+    "summary": f"completed planning stage {stage}",
+    "blocker_reason": "",
+    "artifacts": [],
+    "notes": [],
+    "new_packages": []
+}
+if stage == "breakdown":
+    result["summary"] = "created backend and qa follow-on packages"
+    result["new_packages"] = [
+        {
+            "key": "backend_impl",
+            "title": "Implement core feature",
+            "description": "Build the core backend implementation for the requested project.",
+            "capability": "backend",
+            "priority": 90,
+            "kind": "delivery"
+        },
+        {
+            "title": "Run QA verification",
+            "description": "Verify the generated implementation package.",
+            "capability": "qa",
+            "priority": 80,
+            "kind": "delivery",
+            "depends_on": ["backend_impl"]
+        }
+    ]
+Path(os.environ["CODEX_AUTOMATE_RESULT_FILE"]).write_text(
+    json.dumps(result),
+    encoding="utf-8",
+)
+PY"""
+        delivery_command = """python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+context = json.loads(Path(os.environ["CODEX_AUTOMATE_CONTEXT_FILE"]).read_text(encoding="utf-8"))
+Path(os.environ["CODEX_AUTOMATE_RESULT_FILE"]).write_text(
+    json.dumps({
+        "status": "completed",
+        "summary": f"completed {context['package']['capability']} package",
+        "blocker_reason": "",
+        "artifacts": [],
+        "notes": [],
+        "new_packages": []
+    }),
+    encoding="utf-8",
+)
+PY"""
+        self.store.register_agent(
+            "planner",
+            ["planning"],
+            metadata={
+                "runner": {
+                    "type": "shell",
+                    "command": planning_command,
+                    "cwd": str(self.workspace_root),
+                }
+            },
+        )
+        self.store.register_agent(
+            "builder",
+            ["backend"],
+            metadata={
+                "runner": {
+                    "type": "shell",
+                    "command": delivery_command,
+                    "cwd": str(self.workspace_root),
+                }
+            },
+        )
+        self.store.register_agent(
+            "qa",
+            ["qa"],
+            metadata={
+                "runner": {
+                    "type": "shell",
+                    "command": delivery_command,
+                    "cwd": str(self.workspace_root),
+                }
+            },
+        )
+
+        goal_id = self.orchestrator.submit_goal_from_dict(
+            {
+                "title": "Staged planning flow",
+                "objective": "Start from a free-form goal and generate implementation work.",
+            }
+        )
+
+        result = self.runtime.run_autopilot(goal_id=goal_id, max_iterations=10)
+        self.assertEqual(result["dashboard"]["goal"]["status"], "completed")
+
+        packages = self.store.list_packages(goal_id=goal_id)
+        self.assertEqual(len(packages), 5)
+        generated = [package for package in packages if package["metadata"].get("generated_by_package_id")]
+        self.assertEqual(len(generated), 2)
+        breakdown = next(package for package in packages if package["metadata"].get("stage") == "breakdown")
+        for package in generated:
+            self.assertEqual(package["parent_package_id"], breakdown["id"])
+            self.assertIn(breakdown["id"], package["dependency_ids"])
 
 
 if __name__ == "__main__":

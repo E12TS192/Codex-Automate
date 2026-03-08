@@ -64,6 +64,8 @@ python3 -m codex_automate submit-goal --file examples/demo_goal.json
 python3 -m codex_automate serve-workers --max-cycles 10 --stop-when-idle
 ```
 
+Freie Ziele ohne vorgegebene Pakete sind jetzt ebenfalls moeglich. Dann erzeugt der Orchestrator automatisch die Discovery-Stufen `Machbarkeit -> Architektur -> Paketzerlegung`, und die letzte Stufe kann ueber `new_packages` echte Folgearbeit anlegen.
+
 ## Hosting
 
 - GitHub: vorbereitet ueber [.github/workflows/ci.yml](/Users/alex/Projects/git/Codex Automate/.github/workflows/ci.yml)

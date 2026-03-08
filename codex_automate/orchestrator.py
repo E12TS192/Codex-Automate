@@ -17,44 +17,57 @@ class Orchestrator:
         self.lease_seconds = lease_seconds
         self.resolution_capability = resolution_capability
 
-    def submit_goal(self, goal_input: GoalInput) -> int:
-        goal_id = self.store.create_goal(
-            title=goal_input.title,
-            objective=goal_input.objective,
-            acceptance_criteria=goal_input.acceptance_criteria,
-        )
-        key_to_package_id: Dict[str, int] = {}
-        dependency_links: List[tuple[int, List[str]]] = []
-        for package in goal_input.packages:
-            package_id = self.store.create_work_package(
-                goal_id=goal_id,
-                title=package.title,
-                description=package.description,
-                capability=package.capability,
-                priority=package.priority,
-                kind=package.kind,
-                acceptance_criteria=package.acceptance_criteria,
-                metadata=package.metadata,
-            )
-            if package.key:
-                if package.key in key_to_package_id:
-                    raise ValueError(f"Duplicate package key: {package.key}")
-                key_to_package_id[package.key] = package_id
-            dependency_links.append((package_id, list(package.depends_on)))
+    def _default_goal_pipeline(self, payload: Dict[str, Any]) -> List[WorkPackageInput]:
+        objective = payload.get("objective", payload["title"])
+        acceptance = list(payload.get("acceptance_criteria", []))
+        acceptance_text = ", ".join(acceptance) if acceptance else "No explicit acceptance criteria provided yet."
+        return [
+            WorkPackageInput(
+                key="feasibility",
+                title="Machbarkeits-Feedback erstellen",
+                description=(
+                    f"Pruefe die grundsaetzliche Machbarkeit fuer das Ziel '{payload['title']}'. "
+                    f"Objective: {objective}. Acceptance criteria: {acceptance_text}. "
+                    "Bewerte grobe Risiken, fehlende Informationen, grobe Umsetzungsstrategie und entscheide, "
+                    "ob das Vorhaben sinnvoll fortgesetzt werden sollte."
+                ),
+                capability="planning",
+                priority=100,
+                kind="analysis",
+                metadata={"stage": "feasibility", "allow_new_packages": False},
+            ),
+            WorkPackageInput(
+                key="architecture",
+                title="Architektur- und Umsetzungsplan erstellen",
+                description=(
+                    f"Erstelle auf Basis des Machbarkeits-Feedbacks einen belastbaren Architektur- und "
+                    f"Umsetzungsplan fuer '{payload['title']}'. Objective: {objective}. "
+                    "Lege Systemgrenzen, Hauptkomponenten, wichtige Entscheidungen, Risiken und die "
+                    "empfohlene Implementierungsreihenfolge fest."
+                ),
+                capability="planning",
+                priority=95,
+                kind="planning",
+                depends_on=["feasibility"],
+                metadata={"stage": "architecture", "allow_new_packages": False},
+            ),
+            WorkPackageInput(
+                key="breakdown",
+                title="Ausfuehrbare Arbeitspakete erzeugen",
+                description=(
+                    f"Zerlege '{payload['title']}' nach dem Architekturplan in konkrete ausfuehrbare Arbeitspakete. "
+                    "Erzeuge ueber das Feld new_packages die Folgepakete fuer Implementierung, QA, Doku oder Deployment, "
+                    "inklusive Prioritaeten, Abhaengigkeiten und klaren Beschreibungen."
+                ),
+                capability="planning",
+                priority=90,
+                kind="planning",
+                depends_on=["architecture"],
+                metadata={"stage": "breakdown", "allow_new_packages": True},
+            ),
+        ]
 
-        for package_id, dependency_keys in dependency_links:
-            dependency_ids: List[int] = []
-            for dependency_key in dependency_keys:
-                if dependency_key not in key_to_package_id:
-                    raise ValueError(f"Unknown dependency key: {dependency_key}")
-                dependency_ids.append(key_to_package_id[dependency_key])
-            if dependency_ids:
-                self.store.update_package_dependencies(package_id, dependency_ids)
-
-        self.store.refresh_goal_status(goal_id)
-        return goal_id
-
-    def submit_goal_from_dict(self, payload: Dict[str, Any]) -> int:
+    def _parse_packages_from_payload(self, payload: Dict[str, Any]) -> List[WorkPackageInput]:
         packages = [
             WorkPackageInput(
                 title=item["title"],
@@ -69,8 +82,67 @@ class Orchestrator:
             )
             for item in payload.get("packages", [])
         ]
-        if not packages:
-            raise ValueError("A goal requires at least one package.")
+        return packages or self._default_goal_pipeline(payload)
+
+    def add_packages(
+        self,
+        goal_id: int,
+        packages: List[WorkPackageInput],
+        *,
+        parent_package_id: Optional[int] = None,
+        default_dependency_ids: Optional[List[int]] = None,
+    ) -> List[int]:
+        created_ids: List[int] = []
+        key_to_package_id: Dict[str, int] = {}
+        dependency_links: List[tuple[int, List[str]]] = []
+        inherited_dependencies = list(default_dependency_ids or [])
+        for package in packages:
+            metadata = dict(package.metadata)
+            if parent_package_id is not None:
+                metadata.setdefault("generated_by_package_id", parent_package_id)
+            package_id = self.store.create_work_package(
+                goal_id=goal_id,
+                title=package.title,
+                description=package.description,
+                capability=package.capability,
+                priority=package.priority,
+                kind=package.kind,
+                acceptance_criteria=package.acceptance_criteria,
+                dependency_ids=inherited_dependencies,
+                metadata=metadata,
+                parent_package_id=parent_package_id,
+            )
+            created_ids.append(package_id)
+            if package.key:
+                if package.key in key_to_package_id:
+                    raise ValueError(f"Duplicate package key: {package.key}")
+                key_to_package_id[package.key] = package_id
+            dependency_links.append((package_id, list(package.depends_on)))
+
+        for package_id, dependency_keys in dependency_links:
+            if not dependency_keys:
+                continue
+            dependency_ids = list(inherited_dependencies)
+            for dependency_key in dependency_keys:
+                if dependency_key not in key_to_package_id:
+                    raise ValueError(f"Unknown dependency key: {dependency_key}")
+                dependency_ids.append(key_to_package_id[dependency_key])
+            self.store.update_package_dependencies(package_id, dependency_ids)
+
+        self.store.refresh_goal_status(goal_id)
+        return created_ids
+
+    def submit_goal(self, goal_input: GoalInput) -> int:
+        goal_id = self.store.create_goal(
+            title=goal_input.title,
+            objective=goal_input.objective,
+            acceptance_criteria=goal_input.acceptance_criteria,
+        )
+        self.add_packages(goal_id, goal_input.packages)
+        return goal_id
+
+    def submit_goal_from_dict(self, payload: Dict[str, Any]) -> int:
+        packages = self._parse_packages_from_payload(payload)
         goal_input = GoalInput(
             title=payload["title"],
             objective=payload.get("objective", payload["title"]),
