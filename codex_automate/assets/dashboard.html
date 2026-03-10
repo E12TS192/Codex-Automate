@@ -133,6 +133,7 @@
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
+        align-items: center;
       }
 
       .goal-switcher {
@@ -171,6 +172,7 @@
       .goal-panel,
       .metrics-panel,
       .tokens-panel,
+      .focus-panel,
       .timeline-panel,
       .packages-panel,
       .agents-panel,
@@ -190,6 +192,10 @@
         .metrics-panel,
         .tokens-panel {
           grid-column: span 3;
+        }
+
+        .focus-panel {
+          grid-column: span 12;
         }
 
         .timeline-panel,
@@ -293,6 +299,11 @@
         color: var(--warning);
       }
 
+      .badge.stale {
+        background: rgba(24, 33, 29, 0.08);
+        color: var(--muted);
+      }
+
       .chip {
         padding: 6px 10px;
         background: rgba(24, 33, 29, 0.06);
@@ -323,6 +334,18 @@
 
       .card.blocked {
         border-color: rgba(166, 59, 45, 0.22);
+      }
+
+      .card.feedback {
+        border-color: rgba(154, 97, 30, 0.24);
+      }
+
+      .card.error_feedback {
+        border-color: rgba(166, 59, 45, 0.24);
+      }
+
+      .card.stale {
+        border-color: rgba(24, 33, 29, 0.14);
       }
 
       .card-head {
@@ -379,6 +402,20 @@
         gap: 8px;
         font-size: 14px;
         font-weight: 600;
+      }
+
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .toggle input {
+        width: auto;
+        margin: 0;
       }
 
       .status-strip {
@@ -454,6 +491,11 @@
         display: none !important;
       }
 
+      .refresh-state {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
       details.archive {
         border: 1px dashed var(--line);
         border-radius: 18px;
@@ -465,6 +507,12 @@
         cursor: pointer;
         font-weight: 700;
         color: var(--muted);
+      }
+
+      @media (min-width: 960px) {
+        .focus-panel .card-list {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
       }
     </style>
   </head>
@@ -485,6 +533,11 @@
             <div class="toolbar">
               <button id="refresh-button" type="button">Aktualisieren</button>
               <button id="tick-button" type="button" class="secondary">Orchestrator ticken</button>
+              <label class="toggle">
+                <input id="auto-refresh-toggle" type="checkbox" />
+                Auto-Refresh (15s)
+              </label>
+              <span id="refresh-status" class="refresh-state">Manuelle Ansicht</span>
             </div>
           </div>
         </div>
@@ -510,6 +563,11 @@
           <article class="panel tokens-panel">
             <h2>Token-Stand</h2>
             <div id="token-summary" class="status-strip"></div>
+          </article>
+
+          <article class="panel focus-panel">
+            <h2>Braucht Eingriff</h2>
+            <div id="focus-list" class="card-list"></div>
           </article>
         </section>
 
@@ -792,10 +850,14 @@
         "ux",
         "automation"
       ];
+      const AUTO_REFRESH_MS = 15 * 1000;
 
       const state = {
         selectedGoalId: null,
-        payload: null
+        payload: null,
+        autoRefreshEnabled: localStorage.getItem("codex-automate-auto-refresh") === "true",
+        refreshTimer: null,
+        lastLoadedAt: null
       };
 
       const defaultGoal = {
@@ -839,6 +901,21 @@
           hour: "2-digit",
           minute: "2-digit"
         });
+      }
+
+      function formatClock(value) {
+        if (!value) return "n/a";
+        return new Date(value).toLocaleTimeString("de-DE", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        });
+      }
+
+      function isAgentStale(agent) {
+        if (!agent?.last_heartbeat_at) return true;
+        const ageMs = Date.now() - new Date(agent.last_heartbeat_at).getTime();
+        return ageMs > 90 * 1000;
       }
 
       async function fetchJson(url, options = {}) {
@@ -905,6 +982,32 @@
           budgets: [],
           budget_status: []
         };
+      }
+
+      function setRefreshStatus() {
+        const node = document.getElementById("refresh-status");
+        if (!state.lastLoadedAt) {
+          node.textContent = state.autoRefreshEnabled ? "Live-Modus aktiv" : "Manuelle Ansicht";
+          return;
+        }
+        const prefix = state.autoRefreshEnabled ? "Live" : "Zuletzt";
+        node.textContent = `${prefix} aktualisiert um ${formatClock(state.lastLoadedAt)}`;
+      }
+
+      function syncAutoRefresh() {
+        if (state.refreshTimer) {
+          clearInterval(state.refreshTimer);
+          state.refreshTimer = null;
+        }
+        if (state.autoRefreshEnabled) {
+          state.refreshTimer = window.setInterval(() => {
+            if (document.hidden) return;
+            loadDashboard(state.selectedGoalId).catch(() => {});
+          }, AUTO_REFRESH_MS);
+        }
+        localStorage.setItem("codex-automate-auto-refresh", String(state.autoRefreshEnabled));
+        document.getElementById("auto-refresh-toggle").checked = state.autoRefreshEnabled;
+        setRefreshStatus();
       }
 
       function nextStepText(goal, packages, agents) {
@@ -997,6 +1100,96 @@
             ${activeViolations.length ? chip(`${activeViolations.length} Limit(s) erreicht`, "danger") : chip("Keine Budgetverletzung", "warn")}
           </div>
         `;
+      }
+
+      function renderAttention() {
+        const packages = currentPackages();
+        const notes = currentNotes().filter((note) => note.status === "open");
+        const agents = currentAgents();
+        const budgetStatus = currentTokenUsage().budget_status || [];
+        const blockedPackages = packages.filter((pkg) => pkg.status === "blocked");
+        const staleAgents = agents.filter((agent) => isAgentStale(agent));
+        const exceededBudgets = budgetStatus.filter((item) =>
+          item.budget?.enabled && (item.exceeded?.input || item.exceeded?.output || item.exceeded?.total)
+        );
+        const items = [];
+
+        blockedPackages.forEach((pkg) => {
+          items.push(`
+            <article class="card blocked">
+              <div class="card-head">
+                <div>
+                  <h3 class="card-title">${escapeHtml(pkg.title)}</h3>
+                  <p class="small-copy">Blockiertes Paket #${escapeHtml(pkg.id)}</p>
+                </div>
+                ${badge("blocked")}
+              </div>
+              <p class="small-copy" style="margin-top: 10px;">${escapeHtml(pkg.blocker_reason || latestSummary(pkg))}</p>
+              <div class="toolbar" style="margin-top: 12px;">
+                <button type="button" class="warn" data-action="requeue" data-package-id="${pkg.id}">Neu einreihen</button>
+              </div>
+            </article>
+          `);
+        });
+
+        notes.slice(0, 3).forEach((note) => {
+          items.push(`
+            <article class="card ${escapeHtml(note.kind)}">
+              <div class="card-head">
+                <div>
+                  <h3 class="card-title">${escapeHtml(note.title)}</h3>
+                  <p class="small-copy">${escapeHtml(note.kind)} · ${escapeHtml(formatDate(note.created_at))}</p>
+                </div>
+                ${badge(note.kind, note.kind)}
+              </div>
+              <p class="small-copy" style="margin-top: 10px;">${escapeHtml(note.body)}</p>
+              <div class="toolbar" style="margin-top: 12px;">
+                <button type="button" class="secondary" data-action="resolve-note" data-note-id="${note.id}">Als erledigt markieren</button>
+              </div>
+            </article>
+          `);
+        });
+
+        exceededBudgets.forEach((entry) => {
+          const budget = entry.budget || {};
+          const scopeId = budget.scope_id == null ? "" : ` #${budget.scope_id}`;
+          const details = [
+            entry.exceeded?.input ? `Input ${entry.usage.input_tokens}/${budget.input_limit}` : "",
+            entry.exceeded?.output ? `Output ${entry.usage.output_tokens}/${budget.output_limit}` : "",
+            entry.exceeded?.total ? `Total ${entry.usage.total_tokens}/${budget.total_limit}` : ""
+          ].filter(Boolean).join(" · ");
+          items.push(`
+            <article class="card blocked">
+              <div class="card-head">
+                <div>
+                  <h3 class="card-title">Token-Limit erreicht</h3>
+                  <p class="small-copy">${escapeHtml(budget.scope_type || "scope")}${escapeHtml(scopeId)}</p>
+                </div>
+                ${badge("blocked")}
+              </div>
+              <p class="small-copy" style="margin-top: 10px;">${escapeHtml(details || "Mindestens ein Budget ist ausgeschopft.")}</p>
+            </article>
+          `);
+        });
+
+        staleAgents.forEach((agent) => {
+          items.push(`
+            <article class="card stale">
+              <div class="card-head">
+                <div>
+                  <h3 class="card-title">${escapeHtml(agent.name)}</h3>
+                  <p class="small-copy">Agent sendet keinen frischen Heartbeat.</p>
+                </div>
+                ${badge("stale")}
+              </div>
+              <p class="small-copy" style="margin-top: 10px;">Letzter Heartbeat: ${escapeHtml(formatDate(agent.last_heartbeat_at))}</p>
+            </article>
+          `);
+        });
+
+        document.getElementById("focus-list").innerHTML = items.length
+          ? items.slice(0, 6).join("")
+          : `<div class="empty">Aktuell gibt es keine offenen Eingriffe. Blocker, offene Notizen, Budget-Grenzen oder stale Agenten wuerden hier auftauchen.</div>`;
       }
 
       function renderTimeline() {
@@ -1141,6 +1334,7 @@
         node.innerHTML = agents
           .map((agent) => {
             const runner = agent.metadata?.runner || {};
+            const staleChip = isAgentStale(agent) ? chip("Heartbeat stale", "danger") : "";
             return `
               <article class="card ${escapeHtml(agent.status)}">
                 <div class="card-head">
@@ -1154,6 +1348,7 @@
                   ${chip(`Runner: ${runner.type || "codex_exec"}`)}
                   ${chip(`Timeout: ${runner.timeout_seconds || "n/a"}s`)}
                   ${chip(`Heartbeat: ${runner.heartbeat_interval_seconds || "n/a"}s`)}
+                  ${staleChip}
                 </div>
                 <p class="small-copy" style="margin-top: 10px;">Letzter Heartbeat: ${escapeHtml(formatDate(agent.last_heartbeat_at))}</p>
                 <p class="small-copy">Aktuelles Paket: ${escapeHtml(agent.current_package_id || "-")}</p>
@@ -1317,6 +1512,7 @@
         renderGoalCard();
         renderSummary();
         renderTokenSummary();
+        renderAttention();
         renderTimeline();
         renderPackages();
         renderAgents();
@@ -1331,7 +1527,9 @@
         const payload = await fetchJson(`/api/dashboard${query}`);
         state.payload = payload;
         state.selectedGoalId = payload.goal?.id || goalId || null;
+        state.lastLoadedAt = new Date().toISOString();
         renderAll();
+        setRefreshStatus();
       }
 
       function parseCriteria(text) {
@@ -1534,6 +1732,10 @@
       document.getElementById("save-budget").addEventListener("click", saveBudget);
       document.getElementById("budget-scope").addEventListener("change", syncScopeVisibility);
       document.getElementById("note-requeue").addEventListener("change", syncRequeueVisibility);
+      document.getElementById("auto-refresh-toggle").addEventListener("change", (event) => {
+        state.autoRefreshEnabled = event.target.checked;
+        syncAutoRefresh();
+      });
 
       document.getElementById("goal-title").value = defaultGoal.title;
       document.getElementById("goal-objective").value = defaultGoal.objective;
@@ -1541,6 +1743,7 @@
 
       syncScopeVisibility();
       syncRequeueVisibility();
+      syncAutoRefresh();
       loadDashboard().catch((error) => {
         document.getElementById("goal-card").className = "empty";
         document.getElementById("goal-card").textContent = error.message;
