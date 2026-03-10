@@ -22,4 +22,4 @@ jobs:
           python -m pip install fastapi httpx "psycopg[binary]" uvicorn
 
       - name: Run tests
-        run: python -m unittest discover -v -s tests -t .
+        run: PYTHONPATH=. python -m unittest discover -v -s tests
