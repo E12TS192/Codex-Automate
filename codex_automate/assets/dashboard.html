@@ -1164,7 +1164,7 @@
       }
 
       function renderEvents() {
-        const events = state.payload?.events || [];
+        const events = (state.payload?.events || []).slice(0, 3);
         const node = document.getElementById("event-list");
         if (!events.length) {
           node.innerHTML = `<div class="empty">Noch keine Events vorhanden.</div>`;
