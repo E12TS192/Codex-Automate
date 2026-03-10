@@ -338,6 +338,139 @@ PY"""
         package = self.store.list_packages(goal_id=goal_id)[0]
         self.assertEqual(package["metadata"]["latest_run"]["runner_type"], "shell")
 
+    def test_shell_worker_records_token_usage_from_json_stdout(self) -> None:
+        command = """python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+print(json.dumps({
+    "type": "turn.completed",
+    "usage": {
+        "input_tokens": 120,
+        "cached_input_tokens": 20,
+        "output_tokens": 30
+    }
+}))
+Path(os.environ["CODEX_AUTOMATE_RESULT_FILE"]).write_text(
+    json.dumps({
+        "status": "completed",
+        "summary": "runner completed with usage",
+        "blocker_reason": "",
+        "artifacts": [],
+        "notes": []
+    }),
+    encoding="utf-8",
+)
+PY"""
+        self.store.register_agent(
+            "usage-shell",
+            ["planning"],
+            metadata={
+                "runner": {
+                    "type": "shell",
+                    "command": command,
+                    "cwd": str(self.workspace_root),
+                }
+            },
+        )
+        goal_id = self.orchestrator.submit_goal_from_dict(
+            {
+                "title": "Usage recording test",
+                "packages": [
+                    {
+                        "title": "Usage package",
+                        "description": "Emit a turn.completed usage block",
+                        "capability": "planning",
+                        "priority": 100,
+                    }
+                ],
+            }
+        )
+
+        self.orchestrator.tick()
+        result = self.runtime.run_agent_once("usage-shell")
+
+        self.assertEqual(result["outcome"], "completed")
+        usage_rows = self.store.list_token_usage(goal_id=goal_id)
+        self.assertEqual(len(usage_rows), 1)
+        self.assertEqual(usage_rows[0]["input_tokens"], 120)
+        self.assertEqual(usage_rows[0]["cached_input_tokens"], 20)
+        self.assertEqual(usage_rows[0]["output_tokens"], 30)
+        self.assertEqual(usage_rows[0]["total_tokens"], 150)
+        package = self.store.list_packages(goal_id=goal_id)[0]
+        self.assertEqual(package["metadata"]["latest_run"]["usage"]["total_tokens"], 150)
+
+    def test_budget_guard_blocks_run_before_start(self) -> None:
+        command = """python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+Path(os.environ["CODEX_AUTOMATE_RESULT_FILE"]).write_text(
+    json.dumps({
+        "status": "completed",
+        "summary": "this should not run",
+        "blocker_reason": "",
+        "artifacts": [],
+        "notes": []
+    }),
+    encoding="utf-8",
+)
+PY"""
+        agent_id = self.store.register_agent(
+            "budget-shell",
+            ["planning"],
+            metadata={
+                "runner": {
+                    "type": "shell",
+                    "command": command,
+                    "cwd": str(self.workspace_root),
+                }
+            },
+        )
+        self.store.upsert_token_budget(
+            scope_type="agent",
+            scope_id=agent_id,
+            input_limit=None,
+            output_limit=None,
+            total_limit=10,
+            enabled=True,
+            metadata={},
+        )
+        self.store.record_token_usage(
+            goal_id=None,
+            package_id=None,
+            agent_id=agent_id,
+            runner_type="codex_exec",
+            input_tokens=9,
+            cached_input_tokens=0,
+            output_tokens=3,
+            metadata={},
+        )
+        goal_id = self.orchestrator.submit_goal_from_dict(
+            {
+                "title": "Budget guard test",
+                "packages": [
+                    {
+                        "title": "Budget package",
+                        "description": "Should be blocked before the runner starts",
+                        "capability": "planning",
+                        "priority": 100,
+                    }
+                ],
+            }
+        )
+
+        self.orchestrator.tick()
+        result = self.runtime.run_agent_once("budget-shell")
+
+        self.assertEqual(result["outcome"], "blocked")
+        package = self.store.list_packages(goal_id=goal_id)[0]
+        self.assertEqual(package["status"], "blocked")
+        self.assertIn("budget exceeded", package["blocker_reason"].lower())
+        self.assertEqual(package["metadata"]["latest_run"]["summary"], "Token budget exceeded before run start")
+
     def test_autopilot_runs_shell_workers_to_completion(self) -> None:
         lead_command = """python3 - <<'PY'
 import json

@@ -83,6 +83,54 @@ CREATE TABLE IF NOT EXISTS events (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS operator_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    goal_id INTEGER,
+    package_id INTEGER,
+    agent_id INTEGER,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY(goal_id) REFERENCES goals(id),
+    FOREIGN KEY(package_id) REFERENCES work_packages(id),
+    FOREIGN KEY(agent_id) REFERENCES agents(id)
+);
+
+CREATE TABLE IF NOT EXISTS token_usage_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    goal_id INTEGER,
+    package_id INTEGER,
+    agent_id INTEGER,
+    runner_type TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(goal_id) REFERENCES goals(id),
+    FOREIGN KEY(package_id) REFERENCES work_packages(id),
+    FOREIGN KEY(agent_id) REFERENCES agents(id)
+);
+
+CREATE TABLE IF NOT EXISTS token_budgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope_type TEXT NOT NULL,
+    scope_id INTEGER,
+    input_limit INTEGER,
+    output_limit INTEGER,
+    total_limit INTEGER,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(scope_type, scope_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_packages_goal_status
     ON work_packages(goal_id, status);
 
@@ -91,6 +139,18 @@ CREATE INDEX IF NOT EXISTS idx_assignments_status
 
 CREATE INDEX IF NOT EXISTS idx_events_entity
     ON events(entity_type, entity_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_operator_notes_goal
+    ON operator_notes(goal_id, status, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_operator_notes_package
+    ON operator_notes(package_id, status, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_token_usage_goal
+    ON token_usage_records(goal_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_token_usage_agent
+    ON token_usage_records(agent_id, created_at);
 """
 
 POSTGRES_SCHEMA = """
@@ -153,6 +213,48 @@ CREATE TABLE IF NOT EXISTS events (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS operator_notes (
+    id BIGSERIAL PRIMARY KEY,
+    goal_id BIGINT REFERENCES goals(id),
+    package_id BIGINT REFERENCES work_packages(id),
+    agent_id BIGINT REFERENCES agents(id),
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS token_usage_records (
+    id BIGSERIAL PRIMARY KEY,
+    goal_id BIGINT REFERENCES goals(id),
+    package_id BIGINT REFERENCES work_packages(id),
+    agent_id BIGINT REFERENCES agents(id),
+    runner_type TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS token_budgets (
+    id BIGSERIAL PRIMARY KEY,
+    scope_type TEXT NOT NULL,
+    scope_id BIGINT,
+    input_limit INTEGER,
+    output_limit INTEGER,
+    total_limit INTEGER,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(scope_type, scope_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_packages_goal_status
     ON work_packages(goal_id, status);
 
@@ -161,6 +263,18 @@ CREATE INDEX IF NOT EXISTS idx_assignments_status
 
 CREATE INDEX IF NOT EXISTS idx_events_entity
     ON events(entity_type, entity_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_operator_notes_goal
+    ON operator_notes(goal_id, status, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_operator_notes_package
+    ON operator_notes(package_id, status, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_token_usage_goal
+    ON token_usage_records(goal_id, created_at);
+
+CREATE INDEX IF NOT EXISTS idx_token_usage_agent
+    ON token_usage_records(agent_id, created_at);
 """
 
 

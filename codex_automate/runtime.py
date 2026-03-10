@@ -102,6 +102,100 @@ class WorkerRuntime:
             }
         return snapshot
 
+    def _relevant_operator_notes(
+        self,
+        *,
+        goal_id: int,
+        package_id: Optional[int],
+        agent_id: int,
+        limit: int = 12,
+    ) -> List[Dict[str, Any]]:
+        notes = self.store.list_operator_notes(goal_id=goal_id, statuses=["open"], limit=100)
+        relevant: List[Dict[str, Any]] = []
+        for note in notes:
+            if note["package_id"] is not None and note["package_id"] != package_id:
+                continue
+            if note["agent_id"] is not None and note["agent_id"] != agent_id:
+                continue
+            relevant.append(
+                {
+                    "id": note["id"],
+                    "kind": note["kind"],
+                    "title": note["title"],
+                    "body": note["body"],
+                    "status": note["status"],
+                    "created_at": note["created_at"],
+                }
+            )
+        relevant.sort(key=lambda item: item["id"], reverse=True)
+        return relevant[:limit]
+
+    def _extract_usage_from_stdout(self, stdout_text: str) -> Optional[Dict[str, int]]:
+        usage_payload: Optional[Dict[str, Any]] = None
+        for line in stdout_text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if item.get("type") == "turn.completed" and isinstance(item.get("usage"), dict):
+                usage_payload = item["usage"]
+        if usage_payload is None:
+            return None
+        input_tokens = int(usage_payload.get("input_tokens", 0) or 0)
+        cached_input_tokens = int(usage_payload.get("cached_input_tokens", 0) or 0)
+        output_tokens = int(usage_payload.get("output_tokens", 0) or 0)
+        return {
+            "input_tokens": input_tokens,
+            "cached_input_tokens": cached_input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        }
+
+    def _budget_summary_for_scope(
+        self,
+        *,
+        scope_type: str,
+        goal_id: int,
+        agent_id: int,
+    ) -> Dict[str, int]:
+        if scope_type == "goal":
+            return self.store.summarize_token_usage(goal_id=goal_id)
+        if scope_type == "agent":
+            return self.store.summarize_token_usage(agent_id=agent_id)
+        return self.store.summarize_token_usage()
+
+    def _check_token_budgets(self, *, goal_id: int, agent_id: int) -> List[Dict[str, Any]]:
+        violations: List[Dict[str, Any]] = []
+        for budget in self.store.list_token_budgets(enabled_only=True):
+            scope_type = budget["scope_type"]
+            scope_id = budget["scope_id"]
+            if scope_type == "global" and scope_id is not None:
+                continue
+            if scope_type == "goal" and scope_id != goal_id:
+                continue
+            if scope_type == "agent" and scope_id != agent_id:
+                continue
+            usage = self._budget_summary_for_scope(scope_type=scope_type, goal_id=goal_id, agent_id=agent_id)
+            exceeded_fields: List[str] = []
+            if budget["input_limit"] is not None and usage["input_tokens"] >= int(budget["input_limit"]):
+                exceeded_fields.append(f"input {usage['input_tokens']} / {int(budget['input_limit'])}")
+            if budget["output_limit"] is not None and usage["output_tokens"] >= int(budget["output_limit"]):
+                exceeded_fields.append(f"output {usage['output_tokens']} / {int(budget['output_limit'])}")
+            if budget["total_limit"] is not None and usage["total_tokens"] >= int(budget["total_limit"]):
+                exceeded_fields.append(f"total {usage['total_tokens']} / {int(budget['total_limit'])}")
+            if exceeded_fields:
+                violations.append(
+                    {
+                        "budget": budget,
+                        "usage": usage,
+                        "message": ", ".join(exceeded_fields),
+                    }
+                )
+        return violations
+
     def _resolve_runner_config(self, agent: Dict[str, Any]) -> Dict[str, Any]:
         metadata = dict(agent.get("metadata", {}))
         runner = dict(metadata.get("runner", {}))
@@ -183,6 +277,11 @@ class WorkerRuntime:
             "dependencies": dependencies,
             "blocked_package": blocked_package,
             "sibling_packages": sibling_packages,
+            "operator_notes": self._relevant_operator_notes(
+                goal_id=goal["id"],
+                package_id=package["id"],
+                agent_id=agent["id"],
+            ),
             "agent": {
                 "name": agent["name"],
                 "capabilities": agent["capabilities"],
@@ -222,6 +321,9 @@ class WorkerRuntime:
             Other packages in the same goal:
             {json.dumps(context['sibling_packages'], indent=2, ensure_ascii=True)}
 
+            Open operator notes and feedback:
+            {json.dumps(context['operator_notes'], indent=2, ensure_ascii=True)}
+
             Workspace root: {context['workspace_root']}
             Artifact directory: {context['artifact_dir']}
 
@@ -239,6 +341,7 @@ class WorkerRuntime:
             - If you emit new_packages, every package entry must include all schema keys. Use empty arrays/objects and a non-empty kind string when nothing special is needed.
             - In stage_output, keep irrelevant fields empty or null, but still include them.
             - Prefer the existing package context over fresh exploration. Use only the minimum research needed to answer this package.
+            - If operator notes are present, treat them as the latest human guidance and incorporate them explicitly.
             - Save any supporting artifacts under the artifact directory when useful.
             - Your final response must satisfy the provided JSON schema.
 
@@ -628,6 +731,7 @@ class WorkerRuntime:
             "notes": payload.get("notes", []),
             "new_packages": payload.get("new_packages", []),
             "stage_output": payload.get("stage_output", {}),
+            "usage": payload.get("usage", {}),
             "return_code": return_code,
         }
         runs.append(run_record)
@@ -695,6 +799,38 @@ class WorkerRuntime:
         runner = self._resolve_runner_config(agent)
 
         self.store.mark_assignment_active(agent["id"])
+        budget_violations = self._check_token_budgets(goal_id=goal["id"], agent_id=agent["id"])
+        if budget_violations:
+            payload = {
+                "status": "blocked",
+                "summary": "Token budget exceeded before run start",
+                "blocker_reason": "; ".join(
+                    f"{item['budget']['scope_type']} budget exceeded ({item['message']})"
+                    for item in budget_violations
+                ),
+                "artifacts": [],
+                "notes": [
+                    "The run was not started because one or more configured token budgets are already exhausted."
+                ],
+                "usage": {},
+            }
+            self._append_run_metadata(
+                package_id=package["id"],
+                run_dir=run_dir,
+                runner_type=runner["type"],
+                payload=payload,
+                return_code=0,
+            )
+            self.store.block_current_package(agent["id"], payload["blocker_reason"])
+            return {
+                "agent_name": agent_name,
+                "package_id": package["id"],
+                "package_title": package["title"],
+                "outcome": "blocked",
+                "summary": payload["summary"],
+                "created_package_ids": [],
+                "run_dir": str(run_dir),
+            }
         try:
             if runner["type"] == "shell":
                 completed = self._run_shell_runner(agent["id"], runner, paths, run_dir)
@@ -727,6 +863,20 @@ class WorkerRuntime:
                     }
             else:
                 payload = self._runner_error_payload(completed.returncode, run_dir, paths["stderr"])
+
+        usage = self._extract_usage_from_stdout(completed.stdout)
+        if usage is not None:
+            payload["usage"] = usage
+            self.store.record_token_usage(
+                goal_id=goal["id"],
+                package_id=package["id"],
+                agent_id=agent["id"],
+                runner_type=runner["type"],
+                input_tokens=usage["input_tokens"],
+                cached_input_tokens=usage["cached_input_tokens"],
+                output_tokens=usage["output_tokens"],
+                metadata={"run_dir": str(run_dir)},
+            )
 
         self._append_run_metadata(
             package_id=package["id"],

@@ -50,6 +50,10 @@ class EventType(str, Enum):
     AGENT_HEARTBEAT = "agent.heartbeat"
     ASSIGNMENT_EXPIRED = "assignment.expired"
     ORCHESTRATOR_ACTION = "orchestrator.action"
+    OPERATOR_NOTE_CREATED = "operator_note.created"
+    OPERATOR_NOTE_RESOLVED = "operator_note.resolved"
+    TOKEN_USAGE_RECORDED = "token_usage.recorded"
+    TOKEN_BUDGET_UPDATED = "token_budget.updated"
 
 
 @dataclass
@@ -71,4 +75,3 @@ class GoalInput:
     objective: str
     acceptance_criteria: List[str] = field(default_factory=list)
     packages: List[WorkPackageInput] = field(default_factory=list)
-

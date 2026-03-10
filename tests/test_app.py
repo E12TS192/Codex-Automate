@@ -82,6 +82,86 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(payload["goal"]["id"], goal_id)
         self.assertEqual(len(payload["packages"]), 5)
 
+    def test_manual_package_note_budget_and_requeue_endpoints(self) -> None:
+        goal_response = self.client.post(
+            "/api/goals",
+            json={
+                "title": "Operator goal",
+                "packages": [
+                    {
+                        "title": "Blocked package",
+                        "description": "Manual operator intervention target",
+                        "capability": "planning",
+                        "priority": 100,
+                    }
+                ],
+            },
+        )
+        self.assertEqual(goal_response.status_code, 200)
+        goal_id = goal_response.json()["goal_id"]
+
+        package_response = self.client.post(
+            f"/api/goals/{goal_id}/packages",
+            json={
+                "title": "Manual follow-up",
+                "description": "Created from the dashboard",
+                "capability": "implementation",
+                "priority": 77,
+                "kind": "implementation",
+                "acceptance_criteria": ["One clear deliverable"],
+                "dependency_ids": [],
+                "preferred_agent_name": "delivery-generalist",
+            },
+        )
+        self.assertEqual(package_response.status_code, 200)
+        self.assertEqual(package_response.json()["package"]["metadata"]["preferred_agent_name"], "delivery-generalist")
+
+        note_response = self.client.post(
+            "/api/notes",
+            json={
+                "goal_id": goal_id,
+                "kind": "feedback",
+                "title": "Tighten the package scope",
+                "body": "Please split the package before the next run.",
+            },
+        )
+        self.assertEqual(note_response.status_code, 200)
+        note_id = note_response.json()["note_id"]
+
+        resolve_response = self.client.post(f"/api/notes/{note_id}/resolve")
+        self.assertEqual(resolve_response.status_code, 200)
+
+        budget_response = self.client.put(
+            "/api/token-budgets",
+            json={
+                "scope_type": "goal",
+                "scope_id": goal_id,
+                "total_limit": 5000,
+                "enabled": True,
+            },
+        )
+        self.assertEqual(budget_response.status_code, 200)
+        self.assertEqual(budget_response.json()["budget"]["total_limit"], 5000)
+
+        store = get_store()
+        planner_id = store.register_agent("temp", ["planning"])
+        blocked_package = store.list_packages(goal_id=goal_id)[0]
+        store.assign_package(blocked_package["id"], planner_id)
+        store.block_current_package(planner_id, "Need operator retry")
+        requeue_response = self.client.post(
+            f"/api/packages/{blocked_package['id']}/requeue",
+            json={"reason": "Pre-flight retry"},
+        )
+        self.assertEqual(requeue_response.status_code, 200)
+        self.assertEqual(requeue_response.json()["package"]["status"], "pending")
+
+        dashboard = self.client.get("/api/dashboard", params={"goal_id": goal_id})
+        self.assertEqual(dashboard.status_code, 200)
+        payload = dashboard.json()
+        self.assertIn("operator_notes", payload)
+        self.assertIn("token_usage", payload)
+        self.assertTrue(any(item["scope_type"] == "goal" for item in payload["token_usage"]["budgets"]))
+
     def test_dashboard_requires_auth_when_enabled(self) -> None:
         os.environ["CODEX_AUTOMATE_REQUIRE_AUTH"] = "1"
         os.environ["CODEX_AUTOMATE_AUTH_USERNAME"] = "alex"

@@ -220,7 +220,10 @@ class Orchestrator:
                 continue
             if agent["status"] not in (AgentStatus.IDLE.value, AgentStatus.DEGRADED.value):
                 continue
-            package = self.store.find_assignable_package(agent["capabilities"])
+            package = self.store.find_assignable_package(
+                agent["capabilities"],
+                agent_name=agent["name"],
+            )
             if package is None:
                 continue
             self.store.assign_package(package["id"], agent["id"], lease_seconds=self.lease_seconds)

@@ -3,21 +3,21 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Codex Automate</title>
+    <title>Codex Automate Control Plane</title>
     <style>
       :root {
-        --paper: #f4efe5;
-        --panel: rgba(255, 252, 247, 0.94);
-        --ink: #18201b;
-        --muted: #677168;
-        --line: rgba(24, 32, 27, 0.1);
-        --accent: #144d3d;
-        --accent-soft: rgba(20, 77, 61, 0.12);
-        --warning: #9a5a1f;
-        --warning-soft: rgba(154, 90, 31, 0.12);
-        --danger: #9f3528;
-        --danger-soft: rgba(159, 53, 40, 0.12);
-        --shadow: 0 22px 70px rgba(39, 40, 33, 0.12);
+        --sand: #f6f0e4;
+        --panel: rgba(255, 251, 245, 0.96);
+        --line: rgba(25, 33, 29, 0.1);
+        --ink: #18211d;
+        --muted: #627067;
+        --accent: #0f5a47;
+        --accent-soft: rgba(15, 90, 71, 0.12);
+        --warning: #9a611e;
+        --warning-soft: rgba(154, 97, 30, 0.13);
+        --danger: #a63b2d;
+        --danger-soft: rgba(166, 59, 45, 0.13);
+        --shadow: 0 26px 80px rgba(36, 38, 33, 0.12);
       }
 
       * {
@@ -30,28 +30,80 @@
         color: var(--ink);
         font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
         background:
-          radial-gradient(circle at top left, rgba(20, 77, 61, 0.18), transparent 32%),
-          radial-gradient(circle at top right, rgba(154, 90, 31, 0.12), transparent 26%),
-          linear-gradient(180deg, #fbf8f1 0%, var(--paper) 100%);
+          radial-gradient(circle at top left, rgba(15, 90, 71, 0.18), transparent 28%),
+          radial-gradient(circle at top right, rgba(154, 97, 30, 0.12), transparent 24%),
+          linear-gradient(180deg, #fbf8f2 0%, var(--sand) 100%);
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        border: none;
+        border-radius: 999px;
+        padding: 12px 18px;
+        font-weight: 700;
+        cursor: pointer;
+        background: var(--accent);
+        color: #fff;
+      }
+
+      button.secondary {
+        background: rgba(255, 255, 255, 0.55);
+        color: var(--ink);
+        border: 1px solid var(--line);
+      }
+
+      button.warn {
+        background: var(--warning);
+      }
+
+      button.danger {
+        background: var(--danger);
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        padding: 13px 14px;
+        background: rgba(255, 255, 255, 0.74);
+        color: var(--ink);
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
       }
 
       .shell {
-        max-width: 1240px;
+        max-width: 1360px;
         margin: 0 auto;
-        padding: 28px 18px 48px;
+        padding: 28px 18px 52px;
       }
 
       .hero {
         display: grid;
-        gap: 16px;
-        margin-bottom: 24px;
+        gap: 18px;
+        margin-bottom: 22px;
       }
 
       .hero-top {
         display: flex;
-        align-items: center;
+        gap: 18px;
         justify-content: space-between;
-        gap: 16px;
+        align-items: flex-start;
         flex-wrap: wrap;
       }
 
@@ -64,51 +116,29 @@
 
       h1 {
         margin: 0;
-        font-size: clamp(30px, 5vw, 54px);
-        line-height: 0.95;
         max-width: 9ch;
+        font-size: clamp(34px, 5vw, 58px);
+        line-height: 0.94;
       }
 
       .lede {
         margin: 0;
-        max-width: 62ch;
+        max-width: 72ch;
         color: var(--muted);
-        font-size: 17px;
-        line-height: 1.65;
+        line-height: 1.68;
       }
 
-      .toolbar {
+      .toolbar,
+      .toolbar-wrap {
         display: flex;
         gap: 10px;
         flex-wrap: wrap;
       }
 
-      button {
-        border: none;
-        border-radius: 999px;
-        padding: 12px 18px;
-        font: inherit;
-        font-weight: 600;
-        cursor: pointer;
-        background: var(--accent);
-        color: #fff;
-      }
-
-      button.secondary {
-        background: transparent;
-        color: var(--ink);
-        border: 1px solid var(--line);
-      }
-
-      button.ghost {
-        background: rgba(255, 255, 255, 0.6);
-        color: var(--ink);
-        border: 1px solid var(--line);
-      }
-
-      .layout {
+      .goal-switcher {
+        min-width: min(360px, 100%);
         display: grid;
-        gap: 18px;
+        gap: 8px;
       }
 
       .panel {
@@ -120,27 +150,57 @@
         padding: 20px;
       }
 
-      .overview {
+      .panel h2 {
+        margin: 0 0 14px;
+        font-size: 18px;
+      }
+
+      .layout {
         display: grid;
-        gap: 14px;
+        gap: 18px;
+      }
+
+      .summary-grid,
+      .workspace-grid,
+      .operator-grid {
+        display: grid;
+        gap: 18px;
         grid-template-columns: repeat(12, minmax(0, 1fr));
       }
 
-      .goal-panel {
+      .goal-panel,
+      .metrics-panel,
+      .tokens-panel,
+      .timeline-panel,
+      .packages-panel,
+      .agents-panel,
+      .activity-panel,
+      .task-panel,
+      .feedback-panel,
+      .budget-panel,
+      .notes-panel {
         grid-column: span 12;
       }
 
-      .summary-panel {
-        grid-column: span 12;
-      }
-
-      @media (min-width: 980px) {
+      @media (min-width: 960px) {
         .goal-panel {
-          grid-column: span 8;
+          grid-column: span 6;
         }
 
-        .summary-panel {
-          grid-column: span 4;
+        .metrics-panel,
+        .tokens-panel {
+          grid-column: span 3;
+        }
+
+        .timeline-panel,
+        .packages-panel,
+        .agents-panel,
+        .activity-panel,
+        .task-panel,
+        .feedback-panel,
+        .budget-panel,
+        .notes-panel {
+          grid-column: span 6;
         }
       }
 
@@ -151,47 +211,15 @@
 
       .goal-title {
         margin: 0;
-        font-size: clamp(24px, 3vw, 36px);
-        line-height: 1.05;
+        font-size: clamp(24px, 3vw, 38px);
+        line-height: 1.04;
       }
 
-      .goal-copy,
-      .small-copy {
+      .small-copy,
+      .hint {
         margin: 0;
         color: var(--muted);
-        line-height: 1.65;
-      }
-
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 11px;
-        border-radius: 999px;
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        background: var(--accent-soft);
-        color: var(--accent);
-      }
-
-      .badge.blocked,
-      .badge.failed {
-        background: var(--danger-soft);
-        color: var(--danger);
-      }
-
-      .badge.pending,
-      .badge.assigned {
-        background: rgba(24, 32, 27, 0.08);
-        color: var(--ink);
-      }
-
-      .badge.analysis,
-      .badge.planning {
-        background: rgba(20, 77, 61, 0.08);
-        color: var(--accent);
+        line-height: 1.62;
       }
 
       .metric-grid {
@@ -202,9 +230,9 @@
 
       .metric {
         padding: 14px;
-        border: 1px solid var(--line);
         border-radius: 18px;
-        background: rgba(255, 255, 255, 0.58);
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.56);
       }
 
       .metric span {
@@ -218,102 +246,102 @@
       .metric strong {
         display: block;
         margin-top: 8px;
-        font-size: 26px;
+        font-size: 28px;
         line-height: 1;
       }
 
-      .section-grid {
-        display: grid;
-        gap: 18px;
-        grid-template-columns: repeat(12, minmax(0, 1fr));
-      }
-
-      .timeline-panel,
-      .team-panel,
-      .packages-panel,
-      .activity-panel,
-      .composer-panel {
-        grid-column: span 12;
-      }
-
-      @media (min-width: 980px) {
-        .timeline-panel,
-        .team-panel,
-        .packages-panel,
-        .activity-panel {
-          grid-column: span 6;
-        }
-      }
-
-      .panel h2 {
-        margin: 0 0 14px;
-        font-size: 18px;
-      }
-
-      .stage-list,
-      .agent-list,
-      .package-list,
-      .event-list {
-        display: grid;
-        gap: 12px;
-      }
-
-      .stage-card,
-      .agent-card,
-      .package-card,
-      .event-card {
-        border: 1px solid var(--line);
-        border-radius: 18px;
-        padding: 14px;
-        background: rgba(255, 255, 255, 0.55);
-      }
-
-      .stage-card.active {
-        border-color: rgba(20, 77, 61, 0.25);
-        box-shadow: inset 0 0 0 1px rgba(20, 77, 61, 0.08);
-      }
-
-      .stage-card.blocked {
-        border-color: rgba(159, 53, 40, 0.18);
-      }
-
-      .row {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 12px;
-      }
-
-      .row-title {
-        margin: 0;
-        font-size: 16px;
-      }
-
-      .chip-row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-      }
-
+      .badge,
       .chip {
         display: inline-flex;
         align-items: center;
-        padding: 6px 10px;
+        gap: 8px;
         border-radius: 999px;
         font-size: 12px;
-        font-weight: 600;
-        background: rgba(24, 32, 27, 0.06);
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      .badge {
+        padding: 7px 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .badge.blocked,
+      .badge.failed,
+      .badge.error_feedback {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .badge.pending,
+      .badge.assigned {
+        background: rgba(24, 33, 29, 0.08);
         color: var(--ink);
       }
 
-      .chip.warning {
+      .badge.active,
+      .badge.busy {
+        background: rgba(15, 90, 71, 0.16);
+        color: var(--accent);
+      }
+
+      .badge.feedback {
         background: var(--warning-soft);
         color: var(--warning);
       }
 
-      .chip.muted {
-        background: rgba(24, 32, 27, 0.05);
-        color: var(--muted);
+      .chip {
+        padding: 6px 10px;
+        background: rgba(24, 33, 29, 0.06);
+        color: var(--ink);
+      }
+
+      .chip.warn {
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      .chip.danger {
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .card-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.56);
+      }
+
+      .card.blocked {
+        border-color: rgba(166, 59, 45, 0.22);
+      }
+
+      .card-head {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+        justify-content: space-between;
+      }
+
+      .card-title {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .meta-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
       }
 
       .list {
@@ -323,46 +351,27 @@
       }
 
       .list li + li {
-        margin-top: 6px;
+        margin-top: 5px;
       }
 
-      .stage-sections {
-        display: grid;
-        gap: 10px;
-        margin-top: 12px;
-      }
-
-      .stage-section {
-        padding-top: 10px;
-        border-top: 1px solid var(--line);
-      }
-
-      .stage-section:first-child {
-        padding-top: 0;
-        border-top: none;
-      }
-
-      .stage-section h3 {
-        margin: 0 0 6px;
-        font-size: 12px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-
-      .stage-inline {
-        margin-top: 8px;
-      }
-
-      .hint {
-        color: var(--muted);
-        font-size: 14px;
-        line-height: 1.6;
-      }
-
-      .stack {
+      .form-grid {
         display: grid;
         gap: 12px;
+      }
+
+      .field-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      @media (min-width: 720px) {
+        .field-grid.two {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .field-grid.three {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
       }
 
       label {
@@ -372,50 +381,77 @@
         font-weight: 600;
       }
 
-      input,
-      textarea {
-        width: 100%;
-        border-radius: 16px;
-        border: 1px solid var(--line);
-        padding: 14px 16px;
-        font: inherit;
-        background: rgba(255, 255, 255, 0.74);
-        color: var(--ink);
-      }
-
-      textarea {
-        min-height: 132px;
-        resize: vertical;
-      }
-
-      details {
-        border: 1px dashed var(--line);
-        border-radius: 16px;
-        padding: 12px 14px;
-        background: rgba(255, 255, 255, 0.45);
-      }
-
-      summary {
-        cursor: pointer;
-        font-weight: 600;
-      }
-
-      .mono {
-        font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
-        white-space: pre-wrap;
-        word-break: break-word;
+      .status-strip {
+        display: grid;
+        gap: 10px;
       }
 
       .empty {
         padding: 14px;
         border-radius: 16px;
-        background: rgba(255, 255, 255, 0.52);
         border: 1px dashed var(--line);
+        background: rgba(255, 255, 255, 0.45);
         color: var(--muted);
       }
 
-      .error {
+      .section-split {
+        display: grid;
+        gap: 10px;
+      }
+
+      .section {
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+
+      .section:first-child {
+        padding-top: 0;
+        border-top: none;
+      }
+
+      .section h3 {
+        margin: 0 0 6px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .feedback {
+        min-height: 22px;
+        color: var(--muted);
+      }
+
+      .feedback.error {
         color: var(--danger);
+      }
+
+      .token-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      .token-table th,
+      .token-table td {
+        text-align: left;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .token-table th {
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .mono {
+        font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+      }
+
+      .hidden {
+        display: none !important;
       }
     </style>
   </head>
@@ -425,95 +461,292 @@
         <div class="hero-top">
           <div>
             <div class="eyebrow">Codex Automate</div>
-            <h1>Projekte klar steuern.</h1>
+            <h1>Arbeit vergeben. Feedback geben. Laeufe ueberwachen.</h1>
           </div>
-          <div class="toolbar">
-            <button id="refresh-button" type="button">Aktualisieren</button>
-            <button id="tick-button" type="button" class="ghost">Manueller Tick</button>
+
+          <div class="goal-switcher">
+            <label>
+              Projekt
+              <select id="goal-select"></select>
+            </label>
+            <div class="toolbar">
+              <button id="refresh-button" type="button">Aktualisieren</button>
+              <button id="tick-button" type="button" class="secondary">Orchestrator ticken</button>
+            </div>
           </div>
         </div>
+
         <p class="lede">
-          Diese Ansicht zeigt den Stand eines Projekts verstaendlich und ohne Infrastruktur-Details. Erst wird die
-          MVP-Idee eingegrenzt, dann Integrationen und Risiken geklaert, danach Architektur und konkrete Paketplanung.
+          Diese Control Plane ist fuer den Operator gebaut: Ziele anlegen, manuelle Pakete vergeben, Input und
+          Fehlerfeedback hinterlegen, Blocker neu einreihen und den Verbrauch pro Lauf ueber Token-Budgets begrenzen.
         </p>
       </section>
 
       <section class="layout">
-        <section class="overview">
+        <section class="summary-grid">
           <article class="panel goal-panel">
             <div id="goal-card" class="empty">Projekt wird geladen...</div>
           </article>
 
-          <aside class="panel summary-panel">
-            <h2>Ueberblick</h2>
-            <div class="metric-grid" id="summary-grid"></div>
+          <article class="panel metrics-panel">
+            <h2>Projektzustand</h2>
+            <div id="summary-grid" class="metric-grid"></div>
             <p id="next-step" class="small-copy" style="margin-top: 14px;"></p>
-          </aside>
-        </section>
-
-        <section class="section-grid">
-          <article class="panel timeline-panel">
-            <h2>Projektphasen</h2>
-            <div id="timeline-list" class="stage-list"></div>
           </article>
 
-          <article class="panel team-panel">
-            <h2>Teamstatus</h2>
-            <div id="agent-list" class="agent-list"></div>
+          <article class="panel tokens-panel">
+            <h2>Token-Stand</h2>
+            <div id="token-summary" class="status-strip"></div>
+          </article>
+        </section>
+
+        <section class="workspace-grid">
+          <article class="panel timeline-panel">
+            <h2>Phasen und Orchestrator</h2>
+            <div id="timeline-list" class="card-list"></div>
           </article>
 
           <article class="panel packages-panel">
-            <h2>Arbeitspakete</h2>
-            <div id="package-list" class="package-list"></div>
+            <h2>Pakete und Eingriffe</h2>
+            <div id="package-list" class="card-list"></div>
+          </article>
+
+          <article class="panel agents-panel">
+            <h2>Agenten</h2>
+            <div id="agent-list" class="card-list"></div>
           </article>
 
           <article class="panel activity-panel">
             <h2>Letzte Aktivitaet</h2>
-            <div id="event-list" class="event-list"></div>
+            <div id="event-list" class="card-list"></div>
+          </article>
+        </section>
+
+        <section class="operator-grid">
+          <article class="panel task-panel">
+            <h2>Aufgabe vergeben</h2>
+            <p class="hint">
+              Lege manuelle Arbeitspakete direkt im aktiven Projekt an. Optional kannst du sie auf einen bestimmten
+              Agenten festlegen.
+            </p>
+            <div class="form-grid">
+              <div class="field-grid two">
+                <label>
+                  Titel
+                  <input id="task-title" type="text" placeholder="Zum Beispiel: Blocker in Wave 2 sauber zerlegen" />
+                </label>
+                <label>
+                  Capability
+                  <select id="task-capability"></select>
+                </label>
+              </div>
+
+              <label>
+                Beschreibung
+                <textarea
+                  id="task-description"
+                  placeholder="Beschreibe die Aufgabe klar und direkt. Diese Beschreibung landet im Arbeitspaket."
+                ></textarea>
+              </label>
+
+              <div class="field-grid three">
+                <label>
+                  Prioritaet
+                  <input id="task-priority" type="number" min="1" max="100" value="75" />
+                </label>
+                <label>
+                  Typ
+                  <select id="task-kind">
+                    <option value="delivery">delivery</option>
+                    <option value="implementation">implementation</option>
+                    <option value="planning">planning</option>
+                    <option value="validation">validation</option>
+                    <option value="operations">operations</option>
+                  </select>
+                </label>
+                <label>
+                  Bevorzugter Agent
+                  <select id="task-agent"></select>
+                </label>
+              </div>
+
+              <label>
+                Abhaengigkeiten (Paket-IDs, komma-getrennt)
+                <input id="task-dependencies" type="text" placeholder="Zum Beispiel: 57, 59" />
+              </label>
+
+              <label>
+                Erfolgskriterien (eine Zeile pro Kriterium)
+                <textarea
+                  id="task-criteria"
+                  placeholder="Zum Beispiel: Ergebnis ist konkret, keine offenen Annahmen, naechster Handoff ist klar."
+                ></textarea>
+              </label>
+
+              <div class="toolbar">
+                <button id="create-task" type="button">Paket anlegen</button>
+              </div>
+              <p id="task-feedback" class="feedback"></p>
+            </div>
           </article>
 
-          <article class="panel composer-panel">
-            <h2>Neues Projekt starten</h2>
+          <article class="panel feedback-panel">
+            <h2>Input und Fehlerfeedback</h2>
             <p class="hint">
-              Gib einfach Ziel, Kontext und Erfolgskriterien an. Die ersten fuenf Stufen werden automatisch als
-              MVP-Zielbild, Integrationen, Risiken, Architektur und Paketzerlegung angelegt.
+              Diese Hinweise gehen als offene Operator-Notizen in den naechsten relevanten Agentenlauf ein. Fuer
+              blockierte Pakete kannst du danach direkt requeueen.
             </p>
-            <div class="stack">
+            <div class="form-grid">
+              <div class="field-grid three">
+                <label>
+                  Art
+                  <select id="note-kind">
+                    <option value="input">input</option>
+                    <option value="feedback">feedback</option>
+                    <option value="error_feedback">error_feedback</option>
+                    <option value="decision">decision</option>
+                  </select>
+                </label>
+                <label>
+                  Paket (optional)
+                  <select id="note-package"></select>
+                </label>
+                <label>
+                  Agent (optional)
+                  <select id="note-agent"></select>
+                </label>
+              </div>
+
+              <label>
+                Titel
+                <input id="note-title" type="text" placeholder="Zum Beispiel: Bitte auf Microsoft 365 festziehen" />
+              </label>
+
+              <label>
+                Inhalt
+                <textarea
+                  id="note-body"
+                  placeholder="Hier kannst du Annahmen klarstellen, Fehler rueckmelden oder konkrete Operator-Entscheidungen nachreichen."
+                ></textarea>
+              </label>
+
+              <div class="field-grid two">
+                <label style="align-content: center;">
+                  <input id="note-requeue" type="checkbox" style="width: auto;" />
+                  Blockiertes Paket nach dem Speichern neu einreihen
+                </label>
+                <label id="note-requeue-reason-wrap" class="hidden">
+                  Requeue-Grund
+                  <input id="note-requeue-reason" type="text" value="Operator feedback added" />
+                </label>
+              </div>
+
+              <div class="toolbar">
+                <button id="submit-note" type="button">Hinweis speichern</button>
+              </div>
+              <p id="note-feedback" class="feedback"></p>
+            </div>
+          </article>
+
+          <article class="panel budget-panel">
+            <h2>Token-Budget setzen</h2>
+            <p class="hint">
+              Budgets stoppen neue Runs vor dem Start. Sie schneiden keine laufenden Codex-Aufrufe in der Mitte ab,
+              verhindern aber weitere Ausfuehrungen, sobald ein Limit erreicht ist.
+            </p>
+            <div class="form-grid">
+              <div class="field-grid three">
+                <label>
+                  Scope
+                  <select id="budget-scope">
+                    <option value="global">global</option>
+                    <option value="goal">goal</option>
+                    <option value="agent">agent</option>
+                  </select>
+                </label>
+                <label id="budget-goal-wrap" class="hidden">
+                  Goal
+                  <select id="budget-goal"></select>
+                </label>
+                <label id="budget-agent-wrap" class="hidden">
+                  Agent
+                  <select id="budget-agent"></select>
+                </label>
+              </div>
+
+              <div class="field-grid three">
+                <label>
+                  Input-Limit
+                  <input id="budget-input" type="number" min="0" placeholder="leer = kein Limit" />
+                </label>
+                <label>
+                  Output-Limit
+                  <input id="budget-output" type="number" min="0" placeholder="leer = kein Limit" />
+                </label>
+                <label>
+                  Total-Limit
+                  <input id="budget-total" type="number" min="0" placeholder="leer = kein Limit" />
+                </label>
+              </div>
+
+              <label style="align-content: center;">
+                <input id="budget-enabled" type="checkbox" style="width: auto;" checked />
+                Budget ist aktiv
+              </label>
+
+              <div class="toolbar">
+                <button id="save-budget" type="button">Budget speichern</button>
+              </div>
+              <p id="budget-feedback" class="feedback"></p>
+            </div>
+          </article>
+
+          <article class="panel notes-panel">
+            <h2>Operator-Inbox und Token-Runs</h2>
+            <div class="section-split">
+              <section class="section">
+                <h3>Offene Hinweise</h3>
+                <div id="note-list" class="card-list"></div>
+              </section>
+
+              <section class="section">
+                <h3>Letzte Token-Runs</h3>
+                <div id="token-runs"></div>
+              </section>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel">
+          <h2>Neues Projekt starten</h2>
+          <div class="form-grid">
+            <div class="field-grid two">
               <label>
                 Titel
                 <input id="goal-title" type="text" placeholder="Zum Beispiel: Internes CRM fuer Vertrieb aufbauen" />
               </label>
-
-              <label>
-                Ziel / Kontext
-                <textarea
-                  id="goal-objective"
-                  placeholder="Beschreibe, was erreicht werden soll, fuer wen das gedacht ist und welche Randbedingungen gelten."
-                ></textarea>
-              </label>
-
               <label>
                 Erfolgskriterien
                 <textarea
                   id="goal-criteria"
-                  placeholder="Eine Zeile pro Kriterium, zum Beispiel: Login funktioniert, Kundendaten sind importierbar, Admin kann Rollen vergeben."
+                  placeholder="Eine Zeile pro Kriterium"
                 ></textarea>
               </label>
-
-              <details>
-                <summary>Erweiterte Eingabe (optional)</summary>
-                <p class="hint">
-                  Nur noetig, wenn du bewusst ein fertiges JSON-Goal mit eigenen Paketen schicken willst.
-                </p>
-                <textarea id="goal-json" class="mono"></textarea>
-              </details>
-
-              <div class="toolbar">
-                <button id="submit-goal" type="button">Projekt anlegen</button>
-              </div>
-              <p id="composer-feedback" class="hint"></p>
             </div>
-          </article>
+
+            <label>
+              Ziel / Kontext
+              <textarea
+                id="goal-objective"
+                placeholder="Beschreibe das Ziel, den Kontext und die Randbedingungen."
+              ></textarea>
+            </label>
+
+            <div class="toolbar">
+              <button id="submit-goal" type="button">Projekt anlegen</button>
+            </div>
+            <p id="goal-feedback" class="feedback"></p>
+          </div>
         </section>
       </section>
     </main>
@@ -530,29 +763,70 @@
         qa: "Qualitaet",
         unblock: "Blocker-Aufloesung"
       };
-
-      const defaultObjective =
-        "Wir wollen ein Projekt strukturiert angehen und zuerst Nutzerfluesse, Integrationen, Risiken, Architektur und konkrete Pakete klaeren.";
-      const defaultCriteria = [
-        "Die wichtigsten Risiken sind benannt.",
-        "Ein tragfaehiger Architekturansatz ist beschrieben.",
-        "Die naechsten ausfuehrbaren Arbeitspakete sind klar."
+      const capabilityOptions = [
+        "planning",
+        "implementation",
+        "documentation",
+        "qa",
+        "orchestrator",
+        "backend",
+        "frontend",
+        "api",
+        "integration",
+        "deployment",
+        "security",
+        "docs",
+        "ux",
+        "automation"
       ];
 
-      document.getElementById("goal-title").value = "Internes CRM fuer Vertrieb aufbauen";
-      document.getElementById("goal-objective").value =
-        "Ein kleines internes CRM soll Kunden, Notizen und Aufgaben verwalten. Der Vertrieb braucht eine uebersichtliche Arbeitsoberflaeche und ein Team-Admin soll Rollen verwalten koennen.";
-      document.getElementById("goal-criteria").value = defaultCriteria.join("\n");
-      document.getElementById("goal-json").value = JSON.stringify(
-        {
-          title: "Internes CRM fuer Vertrieb aufbauen",
-          objective:
-            "Ein kleines internes CRM soll Kunden, Notizen und Aufgaben verwalten. Der Vertrieb braucht eine uebersichtliche Arbeitsoberflaeche und ein Team-Admin soll Rollen verwalten koennen.",
-          acceptance_criteria: defaultCriteria
-        },
-        null,
-        2
-      );
+      const state = {
+        selectedGoalId: null,
+        payload: null
+      };
+
+      const defaultGoal = {
+        title: "Internes CRM fuer Vertrieb aufbauen",
+        objective:
+          "Ein kleines internes CRM soll Kunden, Notizen und Aufgaben verwalten. Der Vertrieb braucht eine uebersichtliche Arbeitsoberflaeche und ein Team-Admin soll Rollen verwalten koennen.",
+        acceptance_criteria: [
+          "Die wichtigsten Risiken sind benannt.",
+          "Ein tragfaehiger Architekturansatz ist beschrieben.",
+          "Die naechsten ausfuehrbaren Arbeitspakete sind klar."
+        ]
+      };
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function badge(value, fallback = "unknown") {
+        const label = value || fallback;
+        return `<span class="badge ${escapeHtml(String(label).toLowerCase())}">${escapeHtml(label)}</span>`;
+      }
+
+      function chip(value, extraClass = "") {
+        return `<span class="chip ${extraClass}">${escapeHtml(value)}</span>`;
+      }
+
+      function formatNumber(value) {
+        return new Intl.NumberFormat("de-DE").format(Number(value || 0));
+      }
+
+      function formatDate(value) {
+        if (!value) return "n/a";
+        return new Date(value).toLocaleString("de-DE", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+      }
 
       async function fetchJson(url, options = {}) {
         const response = await fetch(url, {
@@ -566,32 +840,10 @@
         return response.json();
       }
 
-      function escapeHtml(value) {
-        return String(value ?? "")
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;");
-      }
-
-      function badge(status) {
-        const klass = String(status || "").toLowerCase();
-        return `<span class="badge ${klass}">${escapeHtml(status || "unknown")}</span>`;
-      }
-
-      function chip(label, extraClass = "") {
-        return `<span class="chip ${extraClass}">${escapeHtml(label)}</span>`;
-      }
-
-      function stageLabel(value) {
-        return stageLabels[value] || value || "Allgemein";
-      }
-
-      function sortByPriority(packages) {
-        return [...packages].sort((left, right) => {
-          if (right.priority !== left.priority) return right.priority - left.priority;
-          return left.id - right.id;
-        });
+      function setFeedback(id, message, isError = false) {
+        const node = document.getElementById(id);
+        node.textContent = message || "";
+        node.className = isError ? "feedback error" : "feedback";
       }
 
       function inferStage(pkg) {
@@ -601,443 +853,660 @@
         return "delivery";
       }
 
-      function stageOutput(pkg) {
-        return pkg?.metadata?.stage_output || pkg?.metadata?.latest_run?.stage_output || {};
-      }
-
       function latestSummary(pkg) {
         return pkg?.metadata?.latest_run?.summary || pkg?.description || "Noch keine Details vorhanden.";
       }
 
-      function verdictLabel(verdict) {
-        const labels = {
-          go: "Freigegeben",
-          conditional: "Mit Einschraenkungen",
-          blocked: "Blockiert"
-        };
-        return labels[verdict] || verdict || "Offen";
+      function stageOutput(pkg) {
+        return pkg?.metadata?.stage_output || pkg?.metadata?.latest_run?.stage_output || {};
       }
 
-      function renderStageList(items, emptyText) {
+      function listMarkup(items, emptyText) {
         if (!Array.isArray(items) || !items.length) {
           return `<p class="small-copy">${escapeHtml(emptyText)}</p>`;
         }
         return `<ul class="list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
       }
 
-      function renderStageSection(label, content) {
-        return `
-          <section class="stage-section">
-            <h3>${escapeHtml(label)}</h3>
-            ${content}
-          </section>
-        `;
+      function selectedGoal() {
+        return state.payload?.goal || null;
       }
 
-      function renderDiscoveryDetails(stage, pkg) {
-        if (!pkg) {
-          return renderStageSection("Status", "<p class='small-copy'>Diese Phase wurde noch nicht gestartet.</p>");
-        }
-        const output = stageOutput(pkg);
-        if (["mvp_scope", "integration_feasibility", "risk_review"].includes(stage)) {
-          return `
-            <div class="stage-sections">
-              ${renderStageSection(
-                "Einschaetzung",
-                `<div class="chip-row stage-inline">${chip(verdictLabel(output.verdict || "offen"))}</div>`
-              )}
-              ${renderStageSection("Kernaussagen", renderStageList(output.key_points, "Noch keine Kernaussagen hinterlegt."))}
-              ${renderStageSection("Risiken", renderStageList(output.risks, "Noch keine Risiken hinterlegt."))}
-              ${renderStageSection(
-                "Offene Fragen",
-                renderStageList(output.open_questions, "Keine offenen Fragen gemeldet.")
-              )}
-            </div>
-          `;
-        }
-        if (stage === "architecture") {
-          return `
-            <div class="stage-sections">
-              ${renderStageSection("Bausteine", renderStageList(output.components, "Noch keine Komponenten dokumentiert."))}
-              ${renderStageSection("Schluesselentscheidungen", renderStageList(output.decisions, "Noch keine Entscheidungen dokumentiert."))}
-              ${renderStageSection(
-                "Lieferreihenfolge",
-                renderStageList(output.delivery_sequence, "Noch keine Lieferreihenfolge festgelegt.")
-              )}
-              ${renderStageSection(
-                "Validierung",
-                renderStageList(output.validation_strategy, "Noch keine Validierungsstrategie hinterlegt.")
-              )}
-              ${renderStageSection(
-                "Uebergabe",
-                `<p class="small-copy">${escapeHtml(output.handoff || "Noch keine Uebergabe notiert.")}</p>`
-              )}
-            </div>
-          `;
-        }
-        if (stage === "breakdown") {
-          return `
-            <div class="stage-sections">
-              ${renderStageSection(
-                "Erzeugte Pakete",
-                `
-                  <div class="chip-row stage-inline">${chip(`${output.generated_package_count || 0} Pakete`)}</div>
-                  ${renderStageList(output.generated_package_titles, "Noch keine Folgepakete erzeugt.")}
-                `
-              )}
-              ${renderStageSection(
-                "Uebergabe",
-                `<p class="small-copy">${escapeHtml(output.handoff || "Noch keine Uebergabe notiert.")}</p>`
-              )}
-            </div>
-          `;
-        }
-        return renderStageSection("Details", `<p class="small-copy">${escapeHtml(latestSummary(pkg))}</p>`);
+      function currentPackages() {
+        return state.payload?.packages || [];
       }
 
-      function renderDeliveryDetails(packages) {
-        if (!packages.length) {
-          return `
-            <div class="stage-sections">
-              ${renderStageSection(
-                "Status",
-                "<p class='small-copy'>Diese Phase startet, sobald aus der Paketplanung konkrete Folgearbeit entsteht.</p>"
-              )}
-            </div>
-          `;
-        }
-        return `
-          <div class="stage-sections">
-            ${renderStageSection(
-              "Umsetzungspakete",
-              `<ul class="list">${sortByPriority(packages)
-                .map((pkg) => `<li>${escapeHtml(pkg.title)} (${escapeHtml(stageLabel(inferStage(pkg)))}, ${escapeHtml(pkg.status)})</li>`)
-                .join("")}</ul>`
-            )}
-          </div>
-        `;
+      function currentAgents() {
+        return state.payload?.agents || [];
       }
 
-      function collectStageCards(packages) {
-        const discovery = stageOrder.map((stage) => {
-          const pkg = packages.find((item) => inferStage(item) === stage);
-          return {
-            key: stage,
-            label: stageLabel(stage),
-            status: pkg ? pkg.status : "pending",
-            title: pkg ? pkg.title : stageLabel(stage),
-            summary: pkg ? latestSummary(pkg) : "Noch nicht gestartet.",
-            details: renderDiscoveryDetails(stage, pkg),
-            blocker: pkg?.blocker_reason || ""
-          };
-        });
+      function currentNotes() {
+        return state.payload?.operator_notes || [];
+      }
 
-        const deliveryPackages = packages.filter((pkg) => !stageOrder.includes(inferStage(pkg)));
-        const deliveryStatus = deliveryPackages.length
-          ? deliveryPackages.some((pkg) => pkg.status === "blocked")
-            ? "blocked"
-            : deliveryPackages.every((pkg) => pkg.status === "completed")
-              ? "completed"
-              : deliveryPackages.some((pkg) => pkg.status === "active" || pkg.status === "assigned")
-                ? "active"
-                : "pending"
-          : "pending";
-
-        discovery.push({
-          key: "delivery",
-          label: "Umsetzung",
-          status: deliveryStatus,
-          title: deliveryPackages.length ? `${deliveryPackages.length} Folgepakete angelegt` : "Noch keine Folgepakete",
-          summary: deliveryPackages.length
-            ? "Die Paketplanung hat konkrete Folgearbeit erzeugt, die jetzt vom Team abgearbeitet wird."
-            : "Diese Phase startet erst, wenn aus der Paketplanung neue Arbeitspakete entstehen.",
-          details: renderDeliveryDetails(deliveryPackages),
-          blocker: deliveryPackages.find((pkg) => pkg.blocker_reason)?.blocker_reason || ""
-        });
-
-        return discovery;
+      function currentTokenUsage() {
+        return state.payload?.token_usage || {
+          global: {},
+          goal: {},
+          recent_runs: [],
+          budgets: [],
+          budget_status: []
+        };
       }
 
       function nextStepText(goal, packages, agents) {
         if (!goal) return "Noch kein Projekt angelegt.";
-        if (goal.status === "blocked") {
-          const blocked = packages.find((pkg) => pkg.status === "blocked");
-          return blocked?.blocker_reason || "Es gibt aktuell mindestens einen Blocker.";
+        if (packages.some((pkg) => pkg.status === "blocked")) {
+          const pkg = packages.find((item) => item.status === "blocked");
+          return pkg?.blocker_reason || "Es gibt aktuell mindestens einen Blocker.";
         }
         const activeAgent = agents.find((agent) => agent.status === "busy");
         if (activeAgent) {
-          return `${activeAgent.name} arbeitet gerade aktiv am naechsten Schritt.`;
+          return `${activeAgent.name} arbeitet gerade aktiv.`;
         }
-        const nextPackage = sortByPriority(packages).find((pkg) => pkg.status !== "completed");
+        const nextPackage = [...packages]
+          .filter((pkg) => pkg.status !== "completed")
+          .sort((left, right) => (right.priority - left.priority) || (left.id - right.id))[0];
         if (nextPackage) {
-          return `Als naechstes steht '${nextPackage.title}' an.`;
+          return `Als naechstes wartet '${nextPackage.title}'.`;
         }
         return "Alle sichtbaren Pakete sind abgeschlossen.";
       }
 
-      function renderGoal(goal) {
+      function renderGoalCard() {
+        const goal = selectedGoal();
         const node = document.getElementById("goal-card");
         if (!goal) {
-          node.innerHTML = "<div class='empty'>Noch kein Projekt vorhanden.</div>";
+          node.className = "empty";
+          node.innerHTML = "Noch kein Projekt vorhanden.";
           return;
         }
-        const criteria = goal.acceptance_criteria || [];
+        node.className = "";
         node.innerHTML = `
           <div class="goal-head">
-            <div class="chip-row">
+            <div class="toolbar-wrap">
               ${badge(goal.status)}
-              ${chip("Projektziel")}
+              ${chip(`Goal #${goal.id}`)}
             </div>
             <h2 class="goal-title">${escapeHtml(goal.title)}</h2>
-            <p class="goal-copy">${escapeHtml(goal.objective || defaultObjective)}</p>
-            ${
-              criteria.length
-                ? `<ul class="list">${criteria.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
-                : `<p class="small-copy">Noch keine expliziten Erfolgskriterien hinterlegt.</p>`
-            }
+            <p class="small-copy">${escapeHtml(goal.objective)}</p>
+            <div class="section-split">
+              <section class="section">
+                <h3>Erfolgskriterien</h3>
+                ${listMarkup(goal.acceptance_criteria, "Keine expliziten Erfolgskriterien hinterlegt.")}
+              </section>
+              <section class="section">
+                <h3>Aktualisiert</h3>
+                <p class="small-copy">${escapeHtml(formatDate(goal.updated_at))}</p>
+              </section>
+            </div>
           </div>
         `;
       }
 
-      function renderSummary(goal, packages, agents) {
+      function renderSummary() {
+        const packages = currentPackages();
+        const agents = currentAgents();
+        const goal = selectedGoal();
+        const tokenGoal = currentTokenUsage().goal || {};
         const blocked = packages.filter((pkg) => pkg.status === "blocked").length;
+        const active = packages.filter((pkg) => ["active", "assigned"].includes(pkg.status)).length;
         const completed = packages.filter((pkg) => pkg.status === "completed").length;
-        const active = packages.filter((pkg) => pkg.status === "active" || pkg.status === "assigned").length;
-        const busyAgents = agents.filter((agent) => agent.status === "busy").length;
-        document.getElementById("summary-grid").innerHTML = [
-          ["Status", goal ? badge(goal.status) : "<span class='small-copy'>Kein Projekt</span>"],
-          ["Aktive Arbeit", String(active)],
-          ["Abgeschlossen", String(completed)],
-          ["Blocker", blocked ? `<span class="error">${blocked}</span>` : "0"],
-          ["Team aktiv", String(busyAgents)],
-          ["Pakete gesamt", String(packages.length)]
-        ]
-          .map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`)
-          .join("");
+        const node = document.getElementById("summary-grid");
+        node.innerHTML = `
+          <div class="metric"><span>Pakete</span><strong>${formatNumber(packages.length)}</strong></div>
+          <div class="metric"><span>Abgeschlossen</span><strong>${formatNumber(completed)}</strong></div>
+          <div class="metric"><span>Aktiv</span><strong>${formatNumber(active)}</strong></div>
+          <div class="metric"><span>Blocker</span><strong>${formatNumber(blocked)}</strong></div>
+          <div class="metric"><span>Agenten</span><strong>${formatNumber(agents.length)}</strong></div>
+          <div class="metric"><span>Total Tokens</span><strong>${formatNumber(tokenGoal.total_tokens)}</strong></div>
+        `;
         document.getElementById("next-step").textContent = nextStepText(goal, packages, agents);
       }
 
-      function renderTimeline(packages) {
-        const node = document.getElementById("timeline-list");
-        if (!packages.length) {
-          node.innerHTML = "<div class='empty'>Noch keine Phasen sichtbar.</div>";
-          return;
-        }
-        node.innerHTML = collectStageCards(packages)
-          .map((stage) => {
-            const klass = stage.status === "blocked" ? "stage-card blocked" : stage.status === "active" ? "stage-card active" : "stage-card";
-            return `
-              <article class="${klass}">
-                <div class="row">
-                  <div>
-                    <p class="row-title">${escapeHtml(stage.label)}</p>
-                    <p class="small-copy">${escapeHtml(stage.title)}</p>
-                  </div>
-                  ${badge(stage.status)}
-                </div>
-                <p class="small-copy" style="margin-top: 10px;">${escapeHtml(stage.summary)}</p>
-                ${stage.details}
-                ${stage.blocker ? `<div class="chip-row" style="margin-top: 10px;">${chip(stage.blocker, "warning")}</div>` : ""}
-              </article>
-            `;
-          })
-          .join("");
+      function renderTokenSummary() {
+        const tokenUsage = currentTokenUsage();
+        const goalUsage = tokenUsage.goal || {};
+        const budgetStatus = tokenUsage.budget_status || [];
+        const activeViolations = budgetStatus.filter((item) =>
+          item.budget?.enabled && (item.exceeded?.input || item.exceeded?.output || item.exceeded?.total)
+        );
+        const node = document.getElementById("token-summary");
+        node.innerHTML = `
+          <div class="metric-grid">
+            <div class="metric"><span>Input</span><strong>${formatNumber(goalUsage.input_tokens)}</strong></div>
+            <div class="metric"><span>Cached</span><strong>${formatNumber(goalUsage.cached_input_tokens)}</strong></div>
+            <div class="metric"><span>Output</span><strong>${formatNumber(goalUsage.output_tokens)}</strong></div>
+            <div class="metric"><span>Runs</span><strong>${formatNumber(goalUsage.run_count)}</strong></div>
+          </div>
+          <div class="meta-row" style="margin-top: 14px;">
+            ${chip(`${budgetStatus.filter((item) => item.budget?.enabled).length} aktive Budgets`)}
+            ${activeViolations.length ? chip(`${activeViolations.length} Limit(s) erreicht`, "danger") : chip("Keine Budgetverletzung", "warn")}
+          </div>
+        `;
       }
 
-      function renderAgents(agents, packages) {
-        const node = document.getElementById("agent-list");
-        if (!agents.length) {
-          node.innerHTML = "<div class='empty'>Noch keine Agenten registriert.</div>";
-          return;
-        }
-        const packageById = new Map(packages.map((pkg) => [pkg.id, pkg]));
-        node.innerHTML = agents
-          .map((agent) => {
-            const currentPackage = packageById.get(agent.current_package_id);
-            return `
-              <article class="agent-card">
-                <div class="row">
-                  <div>
-                    <p class="row-title">${escapeHtml(agent.name)}</p>
-                    <p class="small-copy">${escapeHtml((agent.capabilities || []).join(", ") || "Keine Rollen")}</p>
-                  </div>
-                  ${badge(agent.status)}
+      function renderTimeline() {
+        const packages = currentPackages();
+        const discoveryCards = stageOrder.map((stage) => {
+          const pkg = packages.find((item) => inferStage(item) === stage);
+          const output = stageOutput(pkg);
+          const sections = [];
+          if (["mvp_scope", "integration_feasibility", "risk_review"].includes(stage)) {
+            sections.push(`
+              <section class="section">
+                <h3>Einschaetzung</h3>
+                <div class="meta-row">${chip(output.verdict || "offen", output.verdict === "blocked" ? "danger" : output.verdict === "conditional" ? "warn" : "")}</div>
+              </section>
+            `);
+            sections.push(`<section class="section"><h3>Kernaussagen</h3>${listMarkup(output.key_points, "Noch keine Kernaussagen.")}</section>`);
+            sections.push(`<section class="section"><h3>Risiken</h3>${listMarkup(output.risks, "Noch keine Risiken.")}</section>`);
+            sections.push(`<section class="section"><h3>Offene Fragen</h3>${listMarkup(output.open_questions, "Keine offenen Fragen.")}</section>`);
+          } else if (stage === "architecture") {
+            sections.push(`<section class="section"><h3>Bausteine</h3>${listMarkup(output.components, "Noch keine Komponenten.")}</section>`);
+            sections.push(`<section class="section"><h3>Entscheidungen</h3>${listMarkup(output.decisions, "Noch keine Entscheidungen.")}</section>`);
+            sections.push(`<section class="section"><h3>Lieferreihenfolge</h3>${listMarkup(output.delivery_sequence, "Noch keine Reihenfolge.")}</section>`);
+            sections.push(`<section class="section"><h3>Validierung</h3>${listMarkup(output.validation_strategy, "Noch keine Validierung.")}</section>`);
+          } else if (stage === "breakdown") {
+            sections.push(`<section class="section"><h3>Erzeugte Pakete</h3>${listMarkup(output.generated_package_titles, "Noch keine Folgepakete.")}</section>`);
+            sections.push(`<section class="section"><h3>Handoff</h3><p class="small-copy">${escapeHtml(output.handoff || "Noch kein Handoff.")}</p></section>`);
+          }
+          return `
+            <article class="card ${escapeHtml(pkg?.status || "pending")}">
+              <div class="card-head">
+                <div>
+                  <h3 class="card-title">${escapeHtml(stageLabels[stage])}</h3>
+                  <p class="small-copy">${escapeHtml(pkg?.title || stageLabels[stage])}</p>
                 </div>
-                <p class="small-copy" style="margin-top: 10px;">
-                  ${currentPackage ? `Arbeitet an: ${escapeHtml(currentPackage.title)}` : "Aktuell kein zugewiesenes Paket."}
-                </p>
-              </article>
-            `;
-          })
-          .join("");
+                ${badge(pkg?.status || "pending")}
+              </div>
+              <p class="small-copy" style="margin-top: 10px;">${escapeHtml(latestSummary(pkg))}</p>
+              <div class="section-split">${sections.join("")}</div>
+            </article>
+          `;
+        });
+
+        const deliveryPackages = packages.filter((pkg) => !stageOrder.includes(inferStage(pkg)));
+        discoveryCards.push(`
+          <article class="card ${deliveryPackages.some((pkg) => pkg.status === "blocked") ? "blocked" : ""}">
+            <div class="card-head">
+              <div>
+                <h3 class="card-title">Umsetzung</h3>
+                <p class="small-copy">${deliveryPackages.length ? `${deliveryPackages.length} Folgepakete aktiv oder geplant.` : "Noch keine Folgepakete."}</p>
+              </div>
+              ${badge(
+                deliveryPackages.some((pkg) => pkg.status === "blocked")
+                  ? "blocked"
+                  : deliveryPackages.some((pkg) => ["active", "assigned"].includes(pkg.status))
+                    ? "active"
+                    : deliveryPackages.every((pkg) => pkg.status === "completed") && deliveryPackages.length
+                      ? "completed"
+                      : "pending"
+              )}
+            </div>
+            <section class="section">
+              <h3>Pakete</h3>
+              ${listMarkup(
+                deliveryPackages.map((pkg) => `${pkg.title} (${pkg.status})`),
+                "Noch keine Folgepakete."
+              )}
+            </section>
+          </article>
+        `);
+
+        document.getElementById("timeline-list").innerHTML = discoveryCards.join("");
       }
 
-      function renderPackages(packages) {
+      function renderPackages() {
+        const packages = [...currentPackages()].sort((left, right) => (right.priority - left.priority) || (left.id - right.id));
         const node = document.getElementById("package-list");
         if (!packages.length) {
-          node.innerHTML = "<div class='empty'>Noch keine Arbeitspakete vorhanden.</div>";
+          node.innerHTML = `<div class="empty">Noch keine Pakete vorhanden.</div>`;
           return;
         }
-        node.innerHTML = sortByPriority(packages)
+        node.innerHTML = packages
           .map((pkg) => {
-            const stage = inferStage(pkg);
+            const deps = pkg.dependency_ids?.length ? chip(`Deps: ${pkg.dependency_ids.join(", ")}`) : "";
+            const preferredAgent = pkg.metadata?.preferred_agent_name ? chip(`Agent: ${pkg.metadata.preferred_agent_name}`) : "";
+            const requeueButton = pkg.status === "blocked"
+              ? `<button type="button" class="warn" data-action="requeue" data-package-id="${pkg.id}">Neu einreihen</button>`
+              : "";
             return `
-              <article class="package-card">
-                <div class="row">
+              <article class="card ${escapeHtml(pkg.status)}">
+                <div class="card-head">
                   <div>
-                    <p class="row-title">${escapeHtml(pkg.title)}</p>
-                    <p class="small-copy">${escapeHtml(pkg.description)}</p>
+                    <h3 class="card-title">${escapeHtml(pkg.title)}</h3>
+                    <p class="small-copy">#${pkg.id} · ${escapeHtml(pkg.capability)} · Prioritaet ${escapeHtml(pkg.priority)}</p>
                   </div>
                   ${badge(pkg.status)}
                 </div>
-                <div class="chip-row" style="margin-top: 12px;">
-                  ${chip(stageLabel(stage))}
-                  ${chip(`Rolle: ${pkg.capability}`)}
-                  ${chip(`Prioritaet ${pkg.priority}`, "muted")}
-                  ${pkg.kind === "unblock" ? chip("Blocker-Aufloesung", "warning") : ""}
+                <div class="meta-row">
+                  ${chip(stageLabels[inferStage(pkg)] || inferStage(pkg))}
+                  ${deps}
+                  ${preferredAgent}
                 </div>
-                ${pkg.blocker_reason ? `<p class="small-copy error" style="margin-top: 12px;">${escapeHtml(pkg.blocker_reason)}</p>` : ""}
+                <p class="small-copy" style="margin-top: 10px;">${escapeHtml(latestSummary(pkg))}</p>
+                ${pkg.blocker_reason ? `<section class="section"><h3>Blocker</h3><p class="small-copy">${escapeHtml(pkg.blocker_reason)}</p></section>` : ""}
+                <div class="toolbar" style="margin-top: 12px;">${requeueButton}</div>
               </article>
             `;
           })
           .join("");
       }
 
-      function describeEvent(event) {
-        const payload = event.payload || {};
-        switch (event.event_type) {
-          case "goal.created":
-            return "Ein neues Projekt wurde angelegt.";
-          case "goal.status_changed":
-            return `Der Projektstatus ist jetzt ${payload.status || "aktualisiert"}.`;
-          case "package.created":
-            return `Ein neues Arbeitspaket wurde erstellt: ${payload.title || "ohne Titel"}.`;
-          case "package.assigned":
-            return "Ein Arbeitspaket wurde einem Agenten zugewiesen.";
-          case "package.active":
-            return "Ein Agent arbeitet jetzt aktiv an einem Paket.";
-          case "package.completed":
-            return payload.summary || "Ein Arbeitspaket wurde abgeschlossen.";
-          case "package.blocked":
-            return payload.reason || "Ein Arbeitspaket ist blockiert.";
-          case "package.requeued":
-            return payload.reason || "Ein Arbeitspaket wurde erneut eingeplant.";
-          case "agent.registered":
-            return `Agent registriert: ${payload.name || "unbekannt"}.`;
-          case "agent.heartbeat":
-            return `Agent-Status aktualisiert: ${payload.status || "unknown"}.`;
-          case "assignment.expired":
-            return "Ein Assignment ist ausgelaufen und wurde freigegeben.";
-          default:
-            return event.event_type;
-        }
-      }
-
-      function renderEvents(events) {
-        const node = document.getElementById("event-list");
-        if (!events.length) {
-          node.innerHTML = "<div class='empty'>Noch keine Aktivitaet sichtbar.</div>";
+      function renderAgents() {
+        const agents = currentAgents();
+        const node = document.getElementById("agent-list");
+        if (!agents.length) {
+          node.innerHTML = `<div class="empty">Noch keine Agenten registriert.</div>`;
           return;
         }
-        node.innerHTML = events
-          .slice(0, 10)
-          .map(
-            (event) => `
-              <article class="event-card">
-                <div class="row">
-                  <p class="row-title">${escapeHtml(describeEvent(event))}</p>
-                  ${badge(event.event_type.split(".").pop())}
+        node.innerHTML = agents
+          .map((agent) => {
+            const runner = agent.metadata?.runner || {};
+            return `
+              <article class="card ${escapeHtml(agent.status)}">
+                <div class="card-head">
+                  <div>
+                    <h3 class="card-title">${escapeHtml(agent.name)}</h3>
+                    <p class="small-copy">${escapeHtml((agent.capabilities || []).join(", ") || "keine Capabilities")}</p>
+                  </div>
+                  ${badge(agent.status)}
                 </div>
-                <p class="small-copy" style="margin-top: 10px;">${escapeHtml(event.created_at)}</p>
+                <div class="meta-row">
+                  ${chip(`Runner: ${runner.type || "codex_exec"}`)}
+                  ${chip(`Timeout: ${runner.timeout_seconds || "n/a"}s`)}
+                  ${chip(`Heartbeat: ${runner.heartbeat_interval_seconds || "n/a"}s`)}
+                </div>
+                <p class="small-copy" style="margin-top: 10px;">Letzter Heartbeat: ${escapeHtml(formatDate(agent.last_heartbeat_at))}</p>
+                <p class="small-copy">Aktuelles Paket: ${escapeHtml(agent.current_package_id || "-")}</p>
               </article>
-            `
-          )
+            `;
+          })
           .join("");
       }
 
-      function buildGoalPayload() {
-        const advanced = document.getElementById("goal-json").value.trim();
-        if (advanced) {
-          try {
-            const parsed = JSON.parse(advanced);
-            if (parsed && parsed.title) return parsed;
-          } catch (error) {
-            // ignore and fall back to structured form
-          }
+      function renderEvents() {
+        const events = state.payload?.events || [];
+        const node = document.getElementById("event-list");
+        if (!events.length) {
+          node.innerHTML = `<div class="empty">Noch keine Events vorhanden.</div>`;
+          return;
         }
-
-        const title = document.getElementById("goal-title").value.trim();
-        const objective = document.getElementById("goal-objective").value.trim();
-        const acceptanceCriteria = document
-          .getElementById("goal-criteria")
-          .value
-          .split("\n")
-          .map((item) => item.trim())
-          .filter(Boolean);
-
-        if (!title) {
-          throw new Error("Bitte zuerst einen Titel fuer das Projekt eingeben.");
-        }
-
-        return {
-          title,
-          objective: objective || title,
-          acceptance_criteria: acceptanceCriteria
-        };
+        node.innerHTML = events
+          .map((event) => `
+            <article class="card">
+              <div class="card-head">
+                <div>
+                  <h3 class="card-title">${escapeHtml(event.event_type)}</h3>
+                  <p class="small-copy">${escapeHtml(event.entity_type)} #${escapeHtml(event.entity_id)}</p>
+                </div>
+                ${chip(formatDate(event.created_at))}
+              </div>
+              ${event.payload && Object.keys(event.payload).length ? `<pre class="small-copy mono">${escapeHtml(JSON.stringify(event.payload, null, 2))}</pre>` : ""}
+            </article>
+          `)
+          .join("");
       }
 
-      async function loadDashboard() {
-        const payload = await fetchJson("/api/dashboard");
+      function renderNotes() {
+        const notes = currentNotes();
+        const node = document.getElementById("note-list");
+        if (!notes.length) {
+          node.innerHTML = `<div class="empty">Noch keine Operator-Hinweise vorhanden.</div>`;
+          return;
+        }
+        node.innerHTML = notes
+          .map((note) => `
+            <article class="card ${escapeHtml(note.kind)}">
+              <div class="card-head">
+                <div>
+                  <h3 class="card-title">${escapeHtml(note.title)}</h3>
+                  <p class="small-copy">${escapeHtml(note.kind)} · ${escapeHtml(note.status)} · ${escapeHtml(formatDate(note.created_at))}</p>
+                </div>
+                ${badge(note.kind, note.kind)}
+              </div>
+              <p class="small-copy" style="margin-top: 10px;">${escapeHtml(note.body)}</p>
+              <div class="meta-row">
+                ${note.package_id ? chip(`Paket #${note.package_id}`) : ""}
+                ${note.agent_id ? chip(`Agent #${note.agent_id}`) : ""}
+                ${note.goal_id ? chip(`Goal #${note.goal_id}`) : ""}
+              </div>
+              ${note.status === "open" ? `<div class="toolbar" style="margin-top: 12px;"><button type="button" class="secondary" data-action="resolve-note" data-note-id="${note.id}">Als erledigt markieren</button></div>` : ""}
+            </article>
+          `)
+          .join("");
+      }
+
+      function renderTokenRuns() {
+        const recentRuns = currentTokenUsage().recent_runs || [];
+        const node = document.getElementById("token-runs");
+        if (!recentRuns.length) {
+          node.innerHTML = `<div class="empty">Noch keine Token-Runs erfasst.</div>`;
+          return;
+        }
+        node.innerHTML = `
+          <table class="token-table">
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Input</th>
+                <th>Cached</th>
+                <th>Output</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${recentRuns
+                .map((run) => `
+                  <tr>
+                    <td>
+                      <div class="mono">#${escapeHtml(run.package_id || "-")}</div>
+                      <div class="small-copy">${escapeHtml(formatDate(run.created_at))}</div>
+                    </td>
+                    <td>${formatNumber(run.input_tokens)}</td>
+                    <td>${formatNumber(run.cached_input_tokens)}</td>
+                    <td>${formatNumber(run.output_tokens)}</td>
+                    <td>${formatNumber(run.total_tokens)}</td>
+                  </tr>
+                `)
+                .join("")}
+            </tbody>
+          </table>
+        `;
+      }
+
+      function fillSelect(select, options, selected = "") {
+        select.innerHTML = options
+          .map((option) => {
+            const value = option.value ?? "";
+            const label = option.label ?? option.value ?? "";
+            const isSelected = String(value) === String(selected) ? " selected" : "";
+            return `<option value="${escapeHtml(value)}"${isSelected}>${escapeHtml(label)}</option>`;
+          })
+          .join("");
+      }
+
+      function syncSelectors() {
+        const payload = state.payload || {};
+        const goals = payload.goals || [];
         const packages = payload.packages || [];
         const agents = payload.agents || [];
-        renderGoal(payload.goal);
-        renderSummary(payload.goal, packages, agents);
-        renderTimeline(packages);
-        renderAgents(agents, packages);
-        renderPackages(packages);
-        renderEvents(payload.events || []);
+
+        fillSelect(
+          document.getElementById("goal-select"),
+          goals.map((goal) => ({ value: goal.id, label: `#${goal.id} · ${goal.title}` })),
+          state.selectedGoalId || goals.at(-1)?.id || ""
+        );
+        fillSelect(
+          document.getElementById("budget-goal"),
+          goals.map((goal) => ({ value: goal.id, label: `#${goal.id} · ${goal.title}` })),
+          state.selectedGoalId || goals.at(-1)?.id || ""
+        );
+        fillSelect(
+          document.getElementById("task-capability"),
+          capabilityOptions.map((value) => ({ value, label: value })),
+          "implementation"
+        );
+        fillSelect(
+          document.getElementById("task-agent"),
+          [{ value: "", label: "automatisch" }].concat(
+            agents.map((agent) => ({ value: agent.name, label: agent.name }))
+          ),
+          ""
+        );
+        fillSelect(
+          document.getElementById("note-package"),
+          [{ value: "", label: "kein Paket" }].concat(
+            packages.map((pkg) => ({ value: pkg.id, label: `#${pkg.id} · ${pkg.title}` }))
+          ),
+          ""
+        );
+        fillSelect(
+          document.getElementById("note-agent"),
+          [{ value: "", label: "kein Agent" }].concat(
+            agents.map((agent) => ({ value: agent.id, label: `#${agent.id} · ${agent.name}` }))
+          ),
+          ""
+        );
+        fillSelect(
+          document.getElementById("budget-agent"),
+          agents.map((agent) => ({ value: agent.id, label: `#${agent.id} · ${agent.name}` })),
+          agents[0]?.id || ""
+        );
       }
 
-      async function runTick() {
-        const feedback = document.getElementById("composer-feedback");
-        feedback.textContent = "Tick wird ausgefuehrt...";
-        await fetchJson("/api/tick", { method: "POST" });
-        await loadDashboard();
-        feedback.textContent = "Tick abgeschlossen.";
+      function renderAll() {
+        renderGoalCard();
+        renderSummary();
+        renderTokenSummary();
+        renderTimeline();
+        renderPackages();
+        renderAgents();
+        renderEvents();
+        renderNotes();
+        renderTokenRuns();
+        syncSelectors();
       }
 
-      async function submitGoal() {
-        const feedback = document.getElementById("composer-feedback");
-        feedback.textContent = "";
+      async function loadDashboard(goalId = state.selectedGoalId) {
+        const query = goalId ? `?goal_id=${encodeURIComponent(goalId)}` : "";
+        const payload = await fetchJson(`/api/dashboard${query}`);
+        state.payload = payload;
+        state.selectedGoalId = payload.goal?.id || goalId || null;
+        renderAll();
+      }
+
+      function parseCriteria(text) {
+        return text
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean);
+      }
+
+      function parseDependencyIds(text) {
+        return text
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .map((value) => Number(value))
+          .filter((value) => Number.isFinite(value));
+      }
+
+      async function createGoal() {
+        const payload = {
+          title: document.getElementById("goal-title").value.trim(),
+          objective: document.getElementById("goal-objective").value.trim(),
+          acceptance_criteria: parseCriteria(document.getElementById("goal-criteria").value)
+        };
+        if (!payload.title) {
+          setFeedback("goal-feedback", "Titel fehlt.", true);
+          return;
+        }
+        if (!payload.objective) {
+          payload.objective = payload.title;
+        }
         try {
-          const payload = buildGoalPayload();
-          feedback.textContent = "Projekt wird angelegt...";
           const result = await fetchJson("/api/goals", {
             method: "POST",
             body: JSON.stringify(payload)
           });
-          feedback.textContent = `Projekt #${result.goal_id} wurde angelegt.`;
-          document.getElementById("goal-json").value = JSON.stringify(payload, null, 2);
-          await loadDashboard();
+          state.selectedGoalId = result.goal_id;
+          setFeedback("goal-feedback", `Projekt #${result.goal_id} angelegt.`);
+          await loadDashboard(result.goal_id);
         } catch (error) {
-          feedback.innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
+          setFeedback("goal-feedback", error.message, true);
         }
       }
 
-      document.getElementById("refresh-button").addEventListener("click", () => {
-        loadDashboard().catch((error) => {
-          document.getElementById("composer-feedback").innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
-        });
-      });
-      document.getElementById("tick-button").addEventListener("click", () => {
-        runTick().catch((error) => {
-          document.getElementById("composer-feedback").innerHTML = `<span class="error">${escapeHtml(error.message)}</span>`;
-        });
-      });
-      document.getElementById("submit-goal").addEventListener("click", submitGoal);
+      async function createTask() {
+        if (!state.selectedGoalId) {
+          setFeedback("task-feedback", "Zuerst ein Projekt auswaehlen.", true);
+          return;
+        }
+        const payload = {
+          title: document.getElementById("task-title").value.trim(),
+          description: document.getElementById("task-description").value.trim(),
+          capability: document.getElementById("task-capability").value,
+          priority: Number(document.getElementById("task-priority").value || 50),
+          kind: document.getElementById("task-kind").value,
+          dependency_ids: parseDependencyIds(document.getElementById("task-dependencies").value),
+          acceptance_criteria: parseCriteria(document.getElementById("task-criteria").value),
+          preferred_agent_name: document.getElementById("task-agent").value || null
+        };
+        if (!payload.title || !payload.description) {
+          setFeedback("task-feedback", "Titel und Beschreibung sind Pflicht.", true);
+          return;
+        }
+        try {
+          const result = await fetchJson(`/api/goals/${state.selectedGoalId}/packages`, {
+            method: "POST",
+            body: JSON.stringify(payload)
+          });
+          setFeedback("task-feedback", `Paket #${result.package_id} angelegt.`);
+          await loadDashboard(state.selectedGoalId);
+        } catch (error) {
+          setFeedback("task-feedback", error.message, true);
+        }
+      }
 
+      async function submitNote() {
+        if (!state.selectedGoalId) {
+          setFeedback("note-feedback", "Zuerst ein Projekt auswaehlen.", true);
+          return;
+        }
+        const packageId = document.getElementById("note-package").value || null;
+        const agentId = document.getElementById("note-agent").value || null;
+        const payload = {
+          goal_id: state.selectedGoalId,
+          package_id: packageId ? Number(packageId) : null,
+          agent_id: agentId ? Number(agentId) : null,
+          kind: document.getElementById("note-kind").value,
+          title: document.getElementById("note-title").value.trim(),
+          body: document.getElementById("note-body").value.trim()
+        };
+        if (!payload.title || !payload.body) {
+          setFeedback("note-feedback", "Titel und Inhalt sind Pflicht.", true);
+          return;
+        }
+        try {
+          await fetchJson("/api/notes", {
+            method: "POST",
+            body: JSON.stringify(payload)
+          });
+          if (document.getElementById("note-requeue").checked && payload.package_id) {
+            await fetchJson(`/api/packages/${payload.package_id}/requeue`, {
+              method: "POST",
+              body: JSON.stringify({ reason: document.getElementById("note-requeue-reason").value.trim() || "Operator feedback added" })
+            });
+          }
+          setFeedback("note-feedback", "Hinweis gespeichert.");
+          await loadDashboard(state.selectedGoalId);
+        } catch (error) {
+          setFeedback("note-feedback", error.message, true);
+        }
+      }
+
+      async function saveBudget() {
+        const scopeType = document.getElementById("budget-scope").value;
+        const scopeId = scopeType === "goal"
+          ? Number(document.getElementById("budget-goal").value || 0)
+          : scopeType === "agent"
+            ? Number(document.getElementById("budget-agent").value || 0)
+            : null;
+        const payload = {
+          scope_type: scopeType,
+          scope_id: scopeType === "global" ? null : scopeId,
+          input_limit: document.getElementById("budget-input").value ? Number(document.getElementById("budget-input").value) : null,
+          output_limit: document.getElementById("budget-output").value ? Number(document.getElementById("budget-output").value) : null,
+          total_limit: document.getElementById("budget-total").value ? Number(document.getElementById("budget-total").value) : null,
+          enabled: document.getElementById("budget-enabled").checked
+        };
+        try {
+          await fetchJson("/api/token-budgets", {
+            method: "PUT",
+            body: JSON.stringify(payload)
+          });
+          setFeedback("budget-feedback", "Budget gespeichert.");
+          await loadDashboard(state.selectedGoalId);
+        } catch (error) {
+          setFeedback("budget-feedback", error.message, true);
+        }
+      }
+
+      async function resolveNote(noteId) {
+        try {
+          await fetchJson(`/api/notes/${noteId}/resolve`, { method: "POST" });
+          await loadDashboard(state.selectedGoalId);
+        } catch (error) {
+          alert(error.message);
+        }
+      }
+
+      async function requeuePackage(packageId) {
+        try {
+          await fetchJson(`/api/packages/${packageId}/requeue`, {
+            method: "POST",
+            body: JSON.stringify({ reason: "Manual operator retry" })
+          });
+          await loadDashboard(state.selectedGoalId);
+        } catch (error) {
+          alert(error.message);
+        }
+      }
+
+      function syncScopeVisibility() {
+        const scope = document.getElementById("budget-scope").value;
+        document.getElementById("budget-goal-wrap").classList.toggle("hidden", scope !== "goal");
+        document.getElementById("budget-agent-wrap").classList.toggle("hidden", scope !== "agent");
+      }
+
+      function syncRequeueVisibility() {
+        const visible = document.getElementById("note-requeue").checked;
+        document.getElementById("note-requeue-reason-wrap").classList.toggle("hidden", !visible);
+      }
+
+      document.addEventListener("click", async (event) => {
+        const button = event.target.closest("button[data-action]");
+        if (!button) return;
+        const action = button.dataset.action;
+        if (action === "requeue") {
+          await requeuePackage(Number(button.dataset.packageId));
+        }
+        if (action === "resolve-note") {
+          await resolveNote(Number(button.dataset.noteId));
+        }
+      });
+
+      document.getElementById("goal-select").addEventListener("change", async (event) => {
+        state.selectedGoalId = Number(event.target.value || 0) || null;
+        await loadDashboard(state.selectedGoalId);
+      });
+      document.getElementById("refresh-button").addEventListener("click", () => loadDashboard(state.selectedGoalId));
+      document.getElementById("tick-button").addEventListener("click", async () => {
+        try {
+          await fetchJson("/api/tick", { method: "POST" });
+          await loadDashboard(state.selectedGoalId);
+        } catch (error) {
+          alert(error.message);
+        }
+      });
+      document.getElementById("submit-goal").addEventListener("click", createGoal);
+      document.getElementById("create-task").addEventListener("click", createTask);
+      document.getElementById("submit-note").addEventListener("click", submitNote);
+      document.getElementById("save-budget").addEventListener("click", saveBudget);
+      document.getElementById("budget-scope").addEventListener("change", syncScopeVisibility);
+      document.getElementById("note-requeue").addEventListener("change", syncRequeueVisibility);
+
+      document.getElementById("goal-title").value = defaultGoal.title;
+      document.getElementById("goal-objective").value = defaultGoal.objective;
+      document.getElementById("goal-criteria").value = defaultGoal.acceptance_criteria.join("\n");
+
+      syncScopeVisibility();
+      syncRequeueVisibility();
       loadDashboard().catch((error) => {
-        document.getElementById("goal-card").innerHTML = `<div class="empty error">${escapeHtml(error.message)}</div>`;
+        document.getElementById("goal-card").className = "empty";
+        document.getElementById("goal-card").textContent = error.message;
       });
     </script>
   </body>

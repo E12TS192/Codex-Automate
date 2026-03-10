@@ -40,6 +40,14 @@ def _json_loads(value: Optional[str], default: Any) -> Any:
     return json.loads(value)
 
 
+def _bool_from_db(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value in (1, "1", "true", "True", "t", "T", "yes", "on"):
+        return True
+    return False
+
+
 class StateStore:
     def __init__(self, db_path: str = "state/codex_automate.sqlite3") -> None:
         self.database_target = db_path
@@ -137,6 +145,50 @@ class StateStore:
             "event_type": row["event_type"],
             "payload": _json_loads(row["payload"], {}),
             "created_at": row["created_at"],
+        }
+
+    def _decode_operator_note(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "id": row["id"],
+            "goal_id": row["goal_id"],
+            "package_id": row["package_id"],
+            "agent_id": row["agent_id"],
+            "kind": row["kind"],
+            "title": row["title"],
+            "body": row["body"],
+            "status": row["status"],
+            "metadata": _json_loads(row["metadata"], {}),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    def _decode_token_usage(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "id": row["id"],
+            "goal_id": row["goal_id"],
+            "package_id": row["package_id"],
+            "agent_id": row["agent_id"],
+            "runner_type": row["runner_type"],
+            "input_tokens": int(row["input_tokens"] or 0),
+            "cached_input_tokens": int(row["cached_input_tokens"] or 0),
+            "output_tokens": int(row["output_tokens"] or 0),
+            "total_tokens": int(row["total_tokens"] or 0),
+            "metadata": _json_loads(row["metadata"], {}),
+            "created_at": row["created_at"],
+        }
+
+    def _decode_token_budget(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "id": row["id"],
+            "scope_type": row["scope_type"],
+            "scope_id": row["scope_id"],
+            "input_limit": row["input_limit"],
+            "output_limit": row["output_limit"],
+            "total_limit": row["total_limit"],
+            "enabled": _bool_from_db(row["enabled"]),
+            "metadata": _json_loads(row["metadata"], {}),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
         }
 
     def create_goal(
@@ -316,6 +368,362 @@ class StateStore:
                 {"name": name, "capabilities": list(capabilities)},
             )
             return agent_id
+
+    def create_operator_note(
+        self,
+        *,
+        kind: str,
+        title: str,
+        body: str,
+        goal_id: Optional[int] = None,
+        package_id: Optional[int] = None,
+        agent_id: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        now = _as_timestamp()
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO operator_notes (
+                    goal_id,
+                    package_id,
+                    agent_id,
+                    kind,
+                    title,
+                    body,
+                    status,
+                    metadata,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    goal_id,
+                    package_id,
+                    agent_id,
+                    kind,
+                    title,
+                    body,
+                    "open",
+                    _json_dumps(metadata or {}),
+                    now,
+                    now,
+                ),
+            )
+            note_id = int(cursor.lastrowid)
+            self._record_event(
+                conn,
+                "operator_note",
+                note_id,
+                EventType.OPERATOR_NOTE_CREATED.value,
+                {
+                    "kind": kind,
+                    "goal_id": goal_id,
+                    "package_id": package_id,
+                    "agent_id": agent_id,
+                    "title": title,
+                },
+            )
+            return note_id
+
+    def resolve_operator_note(self, note_id: int) -> None:
+        now = _as_timestamp()
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM operator_notes WHERE id = ?",
+                (note_id,),
+            ).fetchone()
+            if row is None:
+                raise ValueError(f"Unknown operator note {note_id}")
+            conn.execute(
+                """
+                UPDATE operator_notes
+                SET status = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                ("resolved", now, note_id),
+            )
+            self._record_event(
+                conn,
+                "operator_note",
+                note_id,
+                EventType.OPERATOR_NOTE_RESOLVED.value,
+                {"status": "resolved"},
+            )
+
+    def list_operator_notes(
+        self,
+        *,
+        goal_id: Optional[int] = None,
+        package_id: Optional[int] = None,
+        agent_id: Optional[int] = None,
+        statuses: Optional[Iterable[str]] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        query = "SELECT * FROM operator_notes"
+        clauses: List[str] = []
+        params: List[Any] = []
+        if goal_id is not None:
+            clauses.append("goal_id = ?")
+            params.append(goal_id)
+        if package_id is not None:
+            clauses.append("package_id = ?")
+            params.append(package_id)
+        if agent_id is not None:
+            clauses.append("agent_id = ?")
+            params.append(agent_id)
+        if statuses:
+            status_values = list(statuses)
+            placeholders = ", ".join("?" for _ in status_values)
+            clauses.append(f"status IN ({placeholders})")
+            params.extend(status_values)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        with self.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._decode_operator_note(row) for row in rows]
+
+    def record_token_usage(
+        self,
+        *,
+        goal_id: Optional[int],
+        package_id: Optional[int],
+        agent_id: Optional[int],
+        runner_type: str,
+        input_tokens: int,
+        cached_input_tokens: int,
+        output_tokens: int,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        now = _as_timestamp()
+        total_tokens = int(input_tokens) + int(output_tokens)
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO token_usage_records (
+                    goal_id,
+                    package_id,
+                    agent_id,
+                    runner_type,
+                    input_tokens,
+                    cached_input_tokens,
+                    output_tokens,
+                    total_tokens,
+                    metadata,
+                    created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    goal_id,
+                    package_id,
+                    agent_id,
+                    runner_type,
+                    int(input_tokens),
+                    int(cached_input_tokens),
+                    int(output_tokens),
+                    total_tokens,
+                    _json_dumps(metadata or {}),
+                    now,
+                ),
+            )
+            usage_id = int(cursor.lastrowid)
+            self._record_event(
+                conn,
+                "token_usage",
+                usage_id,
+                EventType.TOKEN_USAGE_RECORDED.value,
+                {
+                    "goal_id": goal_id,
+                    "package_id": package_id,
+                    "agent_id": agent_id,
+                    "runner_type": runner_type,
+                    "input_tokens": int(input_tokens),
+                    "cached_input_tokens": int(cached_input_tokens),
+                    "output_tokens": int(output_tokens),
+                    "total_tokens": total_tokens,
+                },
+            )
+            return usage_id
+
+    def list_token_usage(
+        self,
+        *,
+        goal_id: Optional[int] = None,
+        package_id: Optional[int] = None,
+        agent_id: Optional[int] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        query = "SELECT * FROM token_usage_records"
+        clauses: List[str] = []
+        params: List[Any] = []
+        if goal_id is not None:
+            clauses.append("goal_id = ?")
+            params.append(goal_id)
+        if package_id is not None:
+            clauses.append("package_id = ?")
+            params.append(package_id)
+        if agent_id is not None:
+            clauses.append("agent_id = ?")
+            params.append(agent_id)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        with self.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._decode_token_usage(row) for row in rows]
+
+    def summarize_token_usage(
+        self,
+        *,
+        goal_id: Optional[int] = None,
+        agent_id: Optional[int] = None,
+    ) -> Dict[str, int]:
+        query = (
+            "SELECT "
+            "COALESCE(SUM(input_tokens), 0) AS input_tokens, "
+            "COALESCE(SUM(cached_input_tokens), 0) AS cached_input_tokens, "
+            "COALESCE(SUM(output_tokens), 0) AS output_tokens, "
+            "COALESCE(SUM(total_tokens), 0) AS total_tokens, "
+            "COUNT(*) AS run_count "
+            "FROM token_usage_records"
+        )
+        clauses: List[str] = []
+        params: List[Any] = []
+        if goal_id is not None:
+            clauses.append("goal_id = ?")
+            params.append(goal_id)
+        if agent_id is not None:
+            clauses.append("agent_id = ?")
+            params.append(agent_id)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        with self.connect() as conn:
+            row = conn.execute(query, params).fetchone()
+            return {
+                "input_tokens": int(row["input_tokens"] or 0),
+                "cached_input_tokens": int(row["cached_input_tokens"] or 0),
+                "output_tokens": int(row["output_tokens"] or 0),
+                "total_tokens": int(row["total_tokens"] or 0),
+                "run_count": int(row["run_count"] or 0),
+            }
+
+    def upsert_token_budget(
+        self,
+        *,
+        scope_type: str,
+        scope_id: Optional[int],
+        input_limit: Optional[int],
+        output_limit: Optional[int],
+        total_limit: Optional[int],
+        enabled: bool = True,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        now = _as_timestamp()
+        with self.connect() as conn:
+            if scope_id is None:
+                existing = conn.execute(
+                    "SELECT id FROM token_budgets WHERE scope_type = ? AND scope_id IS NULL",
+                    (scope_type,),
+                ).fetchone()
+            else:
+                existing = conn.execute(
+                    "SELECT id FROM token_budgets WHERE scope_type = ? AND scope_id = ?",
+                    (scope_type, scope_id),
+                ).fetchone()
+            if existing is None:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO token_budgets (
+                        scope_type,
+                        scope_id,
+                        input_limit,
+                        output_limit,
+                        total_limit,
+                        enabled,
+                        metadata,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        scope_type,
+                        scope_id,
+                        input_limit,
+                        output_limit,
+                        total_limit,
+                        1 if enabled else 0,
+                        _json_dumps(metadata or {}),
+                        now,
+                        now,
+                    ),
+                )
+                budget_id = int(cursor.lastrowid)
+            else:
+                budget_id = int(existing["id"])
+                conn.execute(
+                    """
+                    UPDATE token_budgets
+                    SET input_limit = ?,
+                        output_limit = ?,
+                        total_limit = ?,
+                        enabled = ?,
+                        metadata = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        input_limit,
+                        output_limit,
+                        total_limit,
+                        1 if enabled else 0,
+                        _json_dumps(metadata or {}),
+                        now,
+                        budget_id,
+                    ),
+                )
+            self._record_event(
+                conn,
+                "token_budget",
+                budget_id,
+                EventType.TOKEN_BUDGET_UPDATED.value,
+                {
+                    "scope_type": scope_type,
+                    "scope_id": scope_id,
+                    "input_limit": input_limit,
+                    "output_limit": output_limit,
+                    "total_limit": total_limit,
+                    "enabled": enabled,
+                },
+            )
+            return budget_id
+
+    def list_token_budgets(
+        self,
+        *,
+        scope_type: Optional[str] = None,
+        enabled_only: bool = False,
+    ) -> List[Dict[str, Any]]:
+        query = "SELECT * FROM token_budgets"
+        clauses: List[str] = []
+        params: List[Any] = []
+        if scope_type is not None:
+            clauses.append("scope_type = ?")
+            params.append(scope_type)
+        if enabled_only:
+            clauses.append("enabled = ?")
+            params.append(1 if self.backend == "sqlite" else True)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY scope_type ASC, scope_id ASC NULLS FIRST" if self.backend == "postgres" else " ORDER BY scope_type ASC, scope_id ASC"
+        with self.connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+            return [self._decode_token_budget(row) for row in rows]
 
     def heartbeat(
         self,
@@ -507,7 +915,12 @@ class StateStore:
             or "generalist" in capability_set
         )
 
-    def find_assignable_package(self, capabilities: Sequence[str]) -> Optional[Dict[str, Any]]:
+    def find_assignable_package(
+        self,
+        capabilities: Sequence[str],
+        *,
+        agent_name: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         with self.connect() as conn:
             rows = conn.execute(
                 """
@@ -519,6 +932,9 @@ class StateStore:
             ).fetchall()
             for row in rows:
                 package = self._decode_package(row)
+                preferred_agent_name = dict(package.get("metadata", {})).get("preferred_agent_name")
+                if preferred_agent_name and agent_name and preferred_agent_name != agent_name:
+                    continue
                 if not self._agent_supports_capability(capabilities, package["capability"]):
                     continue
                 if not self._dependencies_ready(conn, package["dependency_ids"]):
