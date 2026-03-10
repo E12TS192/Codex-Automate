@@ -453,6 +453,19 @@
       .hidden {
         display: none !important;
       }
+
+      details.archive {
+        border: 1px dashed var(--line);
+        border-radius: 18px;
+        padding: 12px 14px;
+        background: rgba(255, 255, 255, 0.42);
+      }
+
+      details.archive summary {
+        cursor: pointer;
+        font-weight: 700;
+        color: var(--muted);
+      }
     </style>
   </head>
   <body>
@@ -1064,34 +1077,58 @@
           node.innerHTML = `<div class="empty">Noch keine Pakete vorhanden.</div>`;
           return;
         }
-        node.innerHTML = packages
-          .map((pkg) => {
-            const deps = pkg.dependency_ids?.length ? chip(`Deps: ${pkg.dependency_ids.join(", ")}`) : "";
-            const preferredAgent = pkg.metadata?.preferred_agent_name ? chip(`Agent: ${pkg.metadata.preferred_agent_name}`) : "";
-            const requeueButton = pkg.status === "blocked"
-              ? `<button type="button" class="warn" data-action="requeue" data-package-id="${pkg.id}">Neu einreihen</button>`
-              : "";
-            return `
-              <article class="card ${escapeHtml(pkg.status)}">
-                <div class="card-head">
-                  <div>
-                    <h3 class="card-title">${escapeHtml(pkg.title)}</h3>
-                    <p class="small-copy">#${pkg.id} · ${escapeHtml(pkg.capability)} · Prioritaet ${escapeHtml(pkg.priority)}</p>
-                  </div>
-                  ${badge(pkg.status)}
+        const completedPackages = packages
+          .filter((pkg) => pkg.status === "completed")
+          .sort((left, right) => {
+            const leftTime = new Date(left.updated_at || 0).getTime();
+            const rightTime = new Date(right.updated_at || 0).getTime();
+            if (rightTime !== leftTime) return rightTime - leftTime;
+            return right.id - left.id;
+          });
+        const latestCompletedId = completedPackages[0]?.id ?? null;
+        const visiblePackages = packages.filter((pkg) => pkg.status !== "completed" || pkg.id === latestCompletedId);
+        const archivedPackages = completedPackages.filter((pkg) => pkg.id !== latestCompletedId);
+
+        function renderPackageCard(pkg) {
+          const deps = pkg.dependency_ids?.length ? chip(`Deps: ${pkg.dependency_ids.join(", ")}`) : "";
+          const preferredAgent = pkg.metadata?.preferred_agent_name ? chip(`Agent: ${pkg.metadata.preferred_agent_name}`) : "";
+          const recentChip = pkg.id === latestCompletedId ? chip("Zuletzt abgeschlossen", "warn") : "";
+          const requeueButton = pkg.status === "blocked"
+            ? `<button type="button" class="warn" data-action="requeue" data-package-id="${pkg.id}">Neu einreihen</button>`
+            : "";
+          return `
+            <article class="card ${escapeHtml(pkg.status)}">
+              <div class="card-head">
+                <div>
+                  <h3 class="card-title">${escapeHtml(pkg.title)}</h3>
+                  <p class="small-copy">#${pkg.id} · ${escapeHtml(pkg.capability)} · Prioritaet ${escapeHtml(pkg.priority)}</p>
                 </div>
-                <div class="meta-row">
-                  ${chip(stageLabels[inferStage(pkg)] || inferStage(pkg))}
-                  ${deps}
-                  ${preferredAgent}
-                </div>
-                <p class="small-copy" style="margin-top: 10px;">${escapeHtml(latestSummary(pkg))}</p>
-                ${pkg.blocker_reason ? `<section class="section"><h3>Blocker</h3><p class="small-copy">${escapeHtml(pkg.blocker_reason)}</p></section>` : ""}
-                <div class="toolbar" style="margin-top: 12px;">${requeueButton}</div>
-              </article>
-            `;
-          })
-          .join("");
+                ${badge(pkg.status)}
+              </div>
+              <div class="meta-row">
+                ${chip(stageLabels[inferStage(pkg)] || inferStage(pkg))}
+                ${deps}
+                ${preferredAgent}
+                ${recentChip}
+              </div>
+              <p class="small-copy" style="margin-top: 10px;">${escapeHtml(latestSummary(pkg))}</p>
+              ${pkg.blocker_reason ? `<section class="section"><h3>Blocker</h3><p class="small-copy">${escapeHtml(pkg.blocker_reason)}</p></section>` : ""}
+              <div class="toolbar" style="margin-top: 12px;">${requeueButton}</div>
+            </article>
+          `;
+        }
+
+        node.innerHTML = `
+          ${visiblePackages.map(renderPackageCard).join("")}
+          ${archivedPackages.length ? `
+            <details class="archive">
+              <summary>Archivierte Completed-Pakete (${archivedPackages.length})</summary>
+              <div class="card-list" style="margin-top: 12px;">
+                ${archivedPackages.map(renderPackageCard).join("")}
+              </div>
+            </details>
+          ` : ""}
+        `;
       }
 
       function renderAgents() {
